@@ -1,0 +1,6 @@
+# پروزه اتوماسیون بورسی
+# Versions used by the existing document tools; application dependencies pending.
+python-docx==1.2.0
+lxml==6.1.1
+typing_extensions==4.15.0
+

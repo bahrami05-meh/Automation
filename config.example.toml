@@ -1,0 +1,15 @@
+# پروزه اتوماسیون بورسی
+# Copy to config.local.toml; local settings are never committed.
+[device]
+name = "personal-device"
+
+[server]
+host = "127.0.0.1"
+port = 8765
+
+[paths]
+data = "data"
+reports = "reports"
+logs = "logs"
+sessions = "sessions"
+

@@ -1,0 +1,370 @@
+from pathlib import Path
+import sys
+
+from docx import Document
+from docx.enum.section import WD_SECTION
+from docx.enum.table import WD_CELL_VERTICAL_ALIGNMENT
+from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.oxml import OxmlElement
+from docx.oxml.ns import qn
+from docx.shared import Inches, Pt, RGBColor
+
+ROOT = Path(__file__).resolve().parent
+sys.path.insert(0, str(ROOT / "document_tools"))
+from fa_docx import add_rtl_paragraph, set_rtl_paragraph, set_rtl_styles, set_rtl_table
+
+OUT = ROOT / "مستند-پروژه-جک.docx"
+FONT = "Vazirmatn"
+BLUE = "2E74B5"
+DARK_BLUE = "1F4D78"
+LIGHT_FILL = "E8EEF5"
+GRAY_FILL = "F2F4F7"
+RISK_FILL = "FFF2F2"
+
+
+def set_cell_shading(cell, fill):
+    tc_pr = cell._tc.get_or_add_tcPr()
+    shd = tc_pr.find(qn("w:shd"))
+    if shd is None:
+        shd = OxmlElement("w:shd")
+        tc_pr.append(shd)
+    shd.set(qn("w:fill"), fill)
+
+
+def set_cell_margins(cell, top=80, start=120, bottom=80, end=120):
+    tc = cell._tc
+    tcPr = tc.get_or_add_tcPr()
+    tcMar = tcPr.first_child_found_in("w:tcMar")
+    if tcMar is None:
+        tcMar = OxmlElement("w:tcMar")
+        tcPr.append(tcMar)
+    for m, v in (("top", top), ("start", start), ("bottom", bottom), ("end", end)):
+        node = tcMar.find(qn(f"w:{m}"))
+        if node is None:
+            node = OxmlElement(f"w:{m}")
+            tcMar.append(node)
+        node.set(qn("w:w"), str(v))
+        node.set(qn("w:type"), "dxa")
+
+
+def set_table_geometry(table, widths):
+    table.autofit = False
+    tbl_pr = table._tbl.tblPr
+    tbl_w = tbl_pr.first_child_found_in("w:tblW")
+    tbl_w.set(qn("w:w"), str(sum(widths)))
+    tbl_w.set(qn("w:type"), "dxa")
+    ind = tbl_pr.first_child_found_in("w:tblInd")
+    if ind is None:
+        ind = OxmlElement("w:tblInd")
+        tbl_pr.append(ind)
+    ind.set(qn("w:w"), "120")
+    ind.set(qn("w:type"), "dxa")
+    grid = table._tbl.tblGrid
+    for grid_col, width in zip(grid.gridCol_lst, widths):
+        grid_col.set(qn("w:w"), str(width))
+    for row in table.rows:
+        for cell, width in zip(row.cells, widths):
+            cell.width = Inches(width / 1440)
+            tc_w = cell._tc.tcPr.tcW
+            tc_w.set(qn("w:w"), str(width))
+            tc_w.set(qn("w:type"), "dxa")
+            set_cell_margins(cell)
+            cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
+
+
+def set_run(run, size=11, bold=False, color="000000"):
+    run.font.name = FONT
+    run._element.rPr.rFonts.set(qn("w:ascii"), FONT)
+    run._element.rPr.rFonts.set(qn("w:hAnsi"), FONT)
+    run._element.rPr.rFonts.set(qn("w:cs"), FONT)
+    run.font.size = Pt(size)
+    run.bold = bold
+    run.font.color.rgb = RGBColor.from_string(color)
+    rpr = run._element.get_or_add_rPr()
+    rtl = OxmlElement("w:rtl")
+    rtl.set(qn("w:val"), "1")
+    rpr.append(rtl)
+
+
+def add_body(doc, text, bold_prefix=None):
+    p = add_rtl_paragraph(doc, "")
+    p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+    p.paragraph_format.space_after = Pt(6)
+    p.paragraph_format.line_spacing = 1.2
+    if bold_prefix and text.startswith(bold_prefix):
+        a, b = bold_prefix, text[len(bold_prefix):]
+        set_run(p.add_run(a), bold=True)
+        set_run(p.add_run(b))
+    else:
+        set_run(p.add_run(text))
+    return p
+
+
+def add_heading(doc, text, level=1):
+    p = doc.add_paragraph(style=f"Heading {level}")
+    set_rtl_paragraph(p)
+    p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+    p.paragraph_format.keep_with_next = True
+    run = p.add_run(text)
+    size = {1: 16, 2: 13, 3: 12}[level]
+    set_run(run, size=size, bold=True, color=BLUE if level < 3 else DARK_BLUE)
+    return p
+
+
+def add_bullet(doc, text):
+    p = doc.add_paragraph(style="List Bullet")
+    set_rtl_paragraph(p)
+    p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+    p.paragraph_format.space_after = Pt(4)
+    p.paragraph_format.line_spacing = 1.2
+    set_run(p.add_run(text))
+    return p
+
+
+def add_number(doc, text):
+    p = doc.add_paragraph(style="List Number")
+    set_rtl_paragraph(p)
+    p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+    p.paragraph_format.space_after = Pt(4)
+    p.paragraph_format.line_spacing = 1.2
+    set_run(p.add_run(text))
+    return p
+
+
+def add_table(doc, headers, rows, widths, risk_rows=None):
+    risk_rows = risk_rows or set()
+    table = doc.add_table(rows=1, cols=len(headers))
+    table.style = "Table Grid"
+    set_rtl_table(table)
+    set_table_geometry(table, widths)
+    for i, label in enumerate(headers):
+        cell = table.rows[0].cells[i]
+        set_cell_shading(cell, LIGHT_FILL)
+        p = cell.paragraphs[0]
+        set_rtl_paragraph(p)
+        p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+        set_run(p.add_run(label), bold=True, color=DARK_BLUE)
+    for r_index, row in enumerate(rows):
+        cells = table.add_row().cells
+        for i, value in enumerate(row):
+            p = cells[i].paragraphs[0]
+            set_rtl_paragraph(p)
+            p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+            set_run(p.add_run(value))
+            if r_index in risk_rows:
+                set_cell_shading(cells[i], RISK_FILL)
+            elif r_index % 2:
+                set_cell_shading(cells[i], GRAY_FILL)
+    return table
+
+
+def add_callout(doc, title, text):
+    table = doc.add_table(rows=1, cols=1)
+    table.style = "Table Grid"
+    set_rtl_table(table)
+    set_table_geometry(table, [9360])
+    cell = table.cell(0, 0)
+    set_cell_shading(cell, "F4F6F9")
+    p = cell.paragraphs[0]
+    set_rtl_paragraph(p)
+    p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+    set_run(p.add_run(title + " "), bold=True, color=DARK_BLUE)
+    set_run(p.add_run(text))
+    doc.add_paragraph()
+
+
+def footer(section):
+    p = section.footer.paragraphs[0]
+    set_rtl_paragraph(p)
+    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    set_run(p.add_run("مستند نیازمندی‌ها و معماری اولیه | جک | محرمانه"), size=9, color="666666")
+
+
+def configure(doc):
+    section = doc.sections[0]
+    section.top_margin = Inches(1)
+    section.bottom_margin = Inches(1)
+    section.left_margin = Inches(1)
+    section.right_margin = Inches(1)
+    section.header_distance = Inches(0.492)
+    section.footer_distance = Inches(0.492)
+    footer(section)
+    set_rtl_styles(doc)
+    normal = doc.styles["Normal"]
+    normal.font.name = FONT
+    normal._element.rPr.rFonts.set(qn("w:cs"), FONT)
+    normal.font.size = Pt(11)
+    for key, size, color in [("Heading 1", 16, BLUE), ("Heading 2", 13, BLUE), ("Heading 3", 12, DARK_BLUE)]:
+        style = doc.styles[key]
+        style.font.name = FONT
+        style._element.rPr.rFonts.set(qn("w:cs"), FONT)
+        style.font.size = Pt(size)
+        style.font.color.rgb = RGBColor.from_string(color)
+
+
+def build():
+    doc = Document()
+    configure(doc)
+    add_body(doc, "پروزه اتوماسیون بورسی")
+
+    p = add_rtl_paragraph(doc, "")
+    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    p.paragraph_format.space_before = Pt(45)
+    p.paragraph_format.space_after = Pt(12)
+    set_run(p.add_run("سند نیازمندی‌ها و معماری اولیه"), size=24, bold=True, color=DARK_BLUE)
+    p = add_rtl_paragraph(doc, "پروژه «جک» — دستیار تحلیل پرتفوی بورس")
+    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    p.paragraph_format.space_after = Pt(26)
+    set_run(p.runs[0], size=15, color="444444")
+    add_table(doc, ["عنوان", "مقدار"], [
+        ["نسخه", "۰٫۱ — سند آغاز پروژه"],
+        ["تاریخ", "۲۴ شهریور ۱۴۰۵ / ۱۵ سپتامبر ۲۰۲۶"],
+        ["وضعیت", "پیش‌نویس برای تأیید مالک محصول"],
+        ["دامنه", "دریافت فقط‌خواندنی پرتفوی، تحلیل چندایجنتی و گزارش فارسی"],
+    ], [2700, 6660])
+    doc.add_page_break()
+
+    add_heading(doc, "۱. خلاصه اجرایی")
+    add_body(doc, "جک یک دستیار هوش مصنوعی برای تحلیل پرتفوی بورسی است. کاربر پس از ورود شخصی به سامانه کارگزاری، اجازه می‌دهد جک اطلاعات قابل‌مشاهدهٔ پرتفوی را صرفاً برای خواندن دریافت کند. جک داده‌ها را اعتبارسنجی می‌کند، تحلیل تابلو، تکنیکال، بنیادی، ریسک و رویدادهای شرکتی را به ایجنت‌های جداگانه می‌سپارد و سپس یک مدل جمع‌بند نتیجه‌ای شفاف و قابل‌پیگیری به زبان فارسی ارائه می‌کند.")
+    add_callout(doc, "اصل محصول:", "جک تصمیم‌یار تحلیلی است، نه سامانه معامله‌گر. ثبت سفارش، خرید، فروش، انتقال وجه و نگهداری رمز عبور خارج از دامنهٔ پروژه هستند.")
+
+    add_heading(doc, "۲. مسئله و اهداف")
+    add_heading(doc, "۲٫۱ مسئله", 2)
+    add_body(doc, "بررسی روزانهٔ پرتفوی شامل منابع متنوع، داده‌های ناهمگون و زمان زیاد است. سرمایه‌گذار به جای چند داشبورد پراکنده، به جمع‌بندی منظم و قابل‌اعتماد از وضعیت هر سهم و ریسک کل پرتفوی نیاز دارد.")
+    add_heading(doc, "۲٫۲ اهداف نسخهٔ اول", 2)
+    for item in [
+        "باز کردن نشانی کارگزاری و واگذاری ورود، رمز و کد تأیید به خود کاربر.",
+        "دریافت فقط‌خواندنی اقلام پرتفوی پس از ورود موفق کاربر.",
+        "تحلیل مستقل هر نماد از منظر تابلو، تکنیکال، بنیادی، ریسک و رویدادهای شرکتی.",
+        "ارائهٔ گزارش فارسی با ذکر منبع، زمان داده، سطح اطمینان و داده‌های ناقص.",
+        "ذخیرهٔ تاریخچهٔ گزارش‌ها برای مقایسهٔ تغییرات قابل‌مشاهده بین اجراها.",
+    ]:
+        add_bullet(doc, item)
+    add_heading(doc, "۲٫۳ خارج از دامنه", 2)
+    for item in [
+        "هر نوع ثبت سفارش، خرید، فروش، برداشت یا انتقال وجه.",
+        "ذخیره یا مشاهدهٔ رمز عبور، کد یک‌بارمصرف و پرسش‌های امنیتی کاربر.",
+        "ادعای قطعیت، تضمین سود یا پیش‌بینی قطعی قیمت آینده.",
+        "تحلیل مبتنی بر دادهٔ بدون منبع، زمان دریافت یا واحد قیمت مشخص.",
+    ]:
+        add_bullet(doc, item)
+
+    add_heading(doc, "۳. بازیگران و نقش‌ها")
+    add_table(doc, ["نقش", "مسئولیت"], [
+        ["کاربر / مالک پرتفوی", "ورود شخصی به کارگزاری، انتخاب دامنه تحلیل و بررسی انسانی گزارش."],
+        ["جک (ارکستریتور)", "مدیریت جریان کار، کنترل دسترسی، تقسیم وظیفه بین ایجنت‌ها و ساخت گزارش."],
+        ["ایجنت‌های تحلیلی", "تحلیل تخصصی هر نماد با داده‌های ثبت‌شده و ارائهٔ شواهد و محدودیت‌ها."],
+        ["مدل جمع‌بند", "ادغام یافته‌ها، اعلام تعارض‌ها و تولید نتیجهٔ قابل‌ردیابی."],
+        ["منابع دادهٔ تأییدشده", "کارگزاری برای پرتفوی؛ منابع بازار و افشاها برای دادهٔ تحلیلی."],
+    ], [2500, 6860])
+
+    add_heading(doc, "۴. جریان کار اصلی")
+    for step in [
+        "کاربر اجرای تحلیل را آغاز و نشانی کارگزاری را انتخاب می‌کند.",
+        "جک مرورگر را باز می‌کند؛ کاربر نام کاربری، رمز و هر کد تأیید را مستقیماً وارد می‌کند.",
+        "پس از ورود، جک فقط داده‌های موردنیاز پرتفوی را می‌خواند و زمان دریافت را ثبت می‌کند.",
+        "لایهٔ اعتبارسنجی، کامل‌بودن داده، واحد ریال/تومان، وضعیت نماد و تازگی داده را بررسی می‌کند.",
+        "ایجنت‌ها به‌صورت موازی تحلیل‌های تخصصی را انجام می‌دهند.",
+        "مدل جمع‌بند، گزارش هر نماد و گزارش سطح پرتفوی را می‌سازد.",
+        "کاربر گزارش را بازبینی می‌کند؛ هیچ اقدام مالی از طرف جک اجرا نمی‌شود.",
+    ]:
+        add_number(doc, step)
+
+    add_heading(doc, "۵. معماری منطقی")
+    add_heading(doc, "معماری دو هسته‌ای", 2)
+    add_body(doc, "طبق تصمیم مالک پروژه، سامانه دو هسته دارد: هستهٔ جمع‌آوری و تحلیل با پایتون، و هستهٔ ارائهٔ اطلاعات با HTML و صفحهٔ ورودی index.html روی سرور لوکال.")
+    add_body(doc, "هستهٔ پایتون مسئول دریافت و اعتبارسنجی داده، اجرای ایجنت‌های تخصصی، جمع‌بندی مدل نهایی و ذخیرهٔ نتایج است. هستهٔ نمایش مسئول ارائهٔ وضعیت اجرا، پرتفوی و گزارش‌ها در مرورگر است؛ محاسبات تحلیلی در هستهٔ پایتون انجام می‌شوند.")
+    add_body(doc, "طرح پیشنهادی ارتباط: رابط مرورگر از طریق API محلی، دادهٔ ساختاریافتهٔ JSON را از هستهٔ پایتون دریافت کند. HTML ساختار صفحه، CSS ظاهر و JavaScript تعامل و دریافت داده را تأمین می‌کنند. فایل index.html توسط سرور محلی ارائه می‌شود و خودش سرور نیست.")
+    add_body(doc, "پیشنهاد نسخهٔ اول، یک سرویس محلی برای ارائهٔ فایل‌های رابط و API است. جدایی دو هسته، جدایی مسئولیت‌هاست و الزاماً دو سرور مستقل نمی‌خواهد. چارچوب و پورت هنوز انتخاب نشده‌اند. برداشت فعلی از لوکال، اجرای روی همان رایانه و دسترسی localhost است؛ دسترسی شبکه‌ای نیازمند تصمیم جداگانه است.")
+    add_body(doc, "ساختار پیشنهادی فایل‌ها زیر F:\\Automasion: پوشهٔ backend برای پایتون، frontend/index.html برای رابط، data برای داده‌ها، reports برای گزارش‌ها و skills برای اسکیل‌ها. این ساختار در مرحلهٔ مستندسازی است و هنوز پیاده‌سازی نشده است.")
+    add_table(doc, ["لایه", "اجزا", "خروجی"], [
+        ["رابط کاربر", "داشبورد، انتخاب بازه، مشاهدهٔ گزارش و تاریخچه", "درخواست تحلیل و گزارش قابل‌خواندن"],
+        ["دسترسی مرورگر", "باز کردن سایت، تشخیص ورود موفق، استخراج فقط‌خواندنی", "دادهٔ خام پرتفوی بدون اطلاعات ورود"],
+        ["اعتبارسنجی", "کنترل منبع، زمان، واحد، تعدیل قیمت و توقف نماد", "دادهٔ معتبر یا وضعیت DATA_BLOCKED"],
+        ["ارکستریشن", "صف کارها، محدودیت زمان، ثبت نسخهٔ داده و فراخوانی ایجنت‌ها", "بستهٔ تحلیل برای هر نماد"],
+        ["ایجنت‌های تحلیل", "تابلو، تکنیکال، بنیادی، ریسک، رویدادهای شرکتی", "یافته‌ها همراه با شواهد و محدودیت"],
+        ["مدل جمع‌بند", "حل تعارض، رتبه‌بندی ریسک، تولید متن فارسی", "گزارش نهایی و وضعیت تصمیم"],
+        ["ذخیره‌سازی", "اطلاعات کمینه، گزارش‌ها، لاگ ممیزی و تنظیمات", "تاریخچه و قابلیت ردیابی"],
+    ], [1900, 4300, 3160])
+
+    add_heading(doc, "۶. ایجنت‌های تخصصی")
+    add_table(doc, ["ایجنت", "ورودی", "خروجی مورد انتظار"], [
+        ["تابلو", "قیمت، حجم، سفارش‌ها، حقیقی/حقوقی، وضعیت نماد", "روند عرضه/تقاضا، نقدشوندگی، صف‌ها و هشدارهای تابلو"],
+        ["تکنیکال", "OHLCV خام/تعدیل‌شده، تایم‌فریم و زمان داده", "روند، سطوح مهم، حجم، RSI، MACD، ایچیموکو و شواهد مخالف"],
+        ["بنیادی", "صورت‌های مالی، نسبت‌ها، صنعت و افشاهای رسمی", "نکات مالی، ریسک‌های بنیادی و موارد نیازمند بررسی"],
+        ["ریسک پرتفوی", "وزن نمادها، صنعت، نقدشوندگی، سود/زیان و محدودیت‌های کاربر", "تمرکزها، ریسک نقدشوندگی و ریسک‌های کل پرتفوی"],
+        ["رویدادها", "افشاها، مجمع، افزایش سرمایه، توقف و بازگشایی", "رویدادهای موثر و تاریخ/منبع هر مورد"],
+    ], [1700, 3650, 4010])
+
+    add_heading(doc, "۷. قرارداد داده و کنترل کیفیت")
+    add_body(doc, "هر رکورد تحلیلی باید حداقل نماد، منبع، زمان دریافت با منطقهٔ زمانی Asia/Tehran، واحد قیمت، نوع قیمت (خام یا تعدیل‌شده)، بازهٔ زمانی، وضعیت معامله و سطح تازگی داده را داشته باشد.")
+    add_table(doc, ["وضعیت", "شرط", "رفتار جک"], [
+        ["VALID", "منبع، زمان، واحد و دادهٔ لازم کامل است.", "تحلیل ادامه پیدا می‌کند."],
+        ["DATA_BLOCKED", "داده ناقص، قدیمی، متناقض یا بدون زمان/واحد مشخص است.", "تحلیل آن بخش متوقف و نقص صریحاً گزارش می‌شود."],
+        ["NO_SETUP", "داده معتبر است اما شواهد کافی برای سناریو وجود ندارد.", "فقط وضعیت مشاهده و دلیل آن گزارش می‌شود."],
+        ["WATCHLIST", "نیازمند بررسی، تأیید یا دادهٔ تکمیلی است.", "برای بازبینی بعدی ثبت می‌شود."],
+    ], [2200, 4200, 2960])
+
+    add_heading(doc, "۸. الزامات امنیت، حریم خصوصی و کنترل دسترسی")
+    add_table(doc, ["کنترل", "الزام"], [
+        ["ورود به کارگزاری", "جک فقط صفحه را باز می‌کند؛ ورود و احراز هویت دومرحله‌ای کاملاً توسط کاربر انجام می‌شود."],
+        ["مدیریت اسرار", "رمز عبور، OTP، پاسخ امنیتی و کوکی حساس در گزارش یا لاگ ذخیره نمی‌شود."],
+        ["حداقل‌سازی داده", "فقط اطلاعات لازم برای تحلیل دریافت و نگهداری می‌شود؛ داده‌های حساس با سیاست حذف مشخص پاک می‌شوند."],
+        ["دسترسی", "نشست کاربر، مجوزها و قابلیت مشاهدهٔ داده‌ها به‌صورت شفاف و قابل لغو مدیریت می‌شوند."],
+        ["ممیزی", "هر اجرا شامل زمان، منابع، نسخهٔ تحلیل و خطاهاست، بدون ثبت اسرار."],
+        ["اقدام مالی", "هر قابلیت ارسال سفارش یا انتقال مالی مسدود است و در طراحی نسخهٔ اول وجود ندارد."],
+    ], [2500, 6860], risk_rows={5})
+    add_callout(doc, "قاعدهٔ غیرقابل‌تغییر:", "در صورت مشاهدهٔ درخواست رمز، کد تأیید یا اقدامی با اثر مالی، فرایند باید متوقف شود و کنترل به کاربر بازگردد.")
+
+    add_heading(doc, "۹. قالب گزارش نهایی")
+    add_body(doc, "گزارش باید میان «واقعیت داده»، «محاسبه» و «برداشت تحلیلی» مرز روشن بگذارد و برای هر ادعا منبع و زمان را ثبت کند.")
+    for item in [
+        "خلاصهٔ پرتفوی: ارزش، تنوع، تمرکز صنعت و ریسک‌های برجسته.",
+        "کارت هر نماد: میزان دارایی، وضعیت داده، خلاصه تابلو، تکنیکال، بنیادی و رویدادها.",
+        "شواهد موافق و مخالف، داده‌های گمشده و سطح اطمینان.",
+        "وضعیت نهایی: WATCHLIST، NO_SETUP، DATA_BLOCKED یا PAPER_APPROVED (فقط محیط آزمایشی).",
+        "ضمیمهٔ ردیابی: منبع، زمان دریافت، نوع قیمت و نسخهٔ مدل/قواعد تحلیل.",
+    ]:
+        add_bullet(doc, item)
+
+    add_heading(doc, "۱۰. معیارهای پذیرش نسخهٔ اول")
+    for item in [
+        "کاربر بتواند بدون افشای رمز به جک، ورود را شخصاً تکمیل کند.",
+        "جک بتواند پرتفوی را فقط‌خواندنی دریافت و زمان/منبع آن را ثبت کند.",
+        "برای هر نماد حداقل سه بخش تحلیل و یک بخش کنترل کیفیت داده در گزارش حاضر باشد.",
+        "در صورت نقص داده، گزارش به‌جای حدس‌زدن، DATA_BLOCKED و علت را نمایش دهد.",
+        "هیچ مسیر فنی برای ارسال سفارش یا انتقال وجه در نسخهٔ اول فعال نباشد.",
+        "گزارش دارای تاریخچه و مقایسهٔ تغییرات قابل‌مشاهده با اجرای پیشین باشد.",
+    ]:
+        add_bullet(doc, item)
+
+    add_heading(doc, "۱۱. نقشهٔ راه پیشنهادی")
+    add_table(doc, ["فاز", "خروجی", "شرط عبور"], [
+        ["۱. مستندسازی", "نیازمندی‌ها، معماری، مرزهای امنیتی و معیار پذیرش", "تأیید مالک محصول"],
+        ["۲. نمونهٔ دسترسی", "باز کردن کارگزاری و استخراج نمونهٔ فقط‌خواندنی", "بدون ذخیرهٔ اطلاعات ورود"],
+        ["۳. هستهٔ داده", "مدل پرتفوی، اعتبارسنجی و تاریخچه", "پوشش خطا و دادهٔ ناقص"],
+        ["۴. تحلیل چندایجنتی", "ایجنت‌های تابلو، تکنیکال، بنیادی و ریسک", "گزارش آزمایشی چندنمادی"],
+        ["۵. ارزیابی", "آزمون روی دادهٔ تاریخی و بازخورد کاربر", "دقت، ردیابی و کنترل ریسک پذیرفتنی"],
+    ], [1850, 4500, 3010])
+
+    add_heading(doc, "۱۲. تصمیم‌های باز برای تأیید")
+    for item in [
+        "نام و آدرس سامانهٔ بورسی برای بررسی دریافت از مرورگر؛ نبود API توسط مالک پروژه اعلام شده است.",
+        "بازار هدف اولیه: فقط بورس تهران، یا فرابورس و صندوق‌ها نیز در نسخهٔ اول.",
+        "دورهٔ به‌روزرسانی گزارش: دستی، روزانه یا فقط در ساعات بازار.",
+        "منابع رسمی/موردتأیید داده برای قیمت، تابلو، کدال و صورت‌های مالی.",
+        "انتخاب مدل هوش مصنوعی و اجرای محلی یا استفاده از API مدل؛ محل اجرای برنامه، کامپیوتر محل کار یا لپ‌تاپ منزل تعیین شده است.",
+    ]:
+        add_bullet(doc, item)
+
+    add_heading(doc, "۱۳. یادداشت مسئولیت")
+    add_body(doc, "خروجی جک صرفاً تحلیل آموزشی و تصمیم‌یار است. گزارش نباید توصیهٔ قطعی، تضمین بازده یا اجرای معامله تلقی شود. تصمیم نهایی و هر اقدام مالی منحصراً با بررسی و تأیید انسان انجام می‌شود.")
+    add_heading(doc, "۱۴. توسعه و استفاده روی دو دستگاه")
+    add_body(doc, "برنامه برای استفادهٔ شخصی و نوبتی روی کامپیوتر محل کار یا لپ‌تاپ منزل آماده می‌شود. کد، مستندات و اسکیل‌ها از طریق GitHub مشترک‌اند؛ محیط پایتون، تنظیمات دستگاه، نشست مرورگر و داده‌های خصوصی مستقل می‌مانند. راهنمای کامل و وضعیت پیاده‌سازی در TWO-DEVICE.md ثبت شده است.")
+    add_body(doc, "مسیر ابزارهای سند نسبت به ریشهٔ پروژه محاسبه می‌شود. setup-local.ps1 محیط محلی را آماده و check-local.py تنظیمات را بررسی می‌کند. میزبان پیشنهادی 127.0.0.1 و پورت پیشنهادی 8765 است. این‌ها مقدمات‌اند و به معنی ساخته‌شدن سرور نیستند. آدرس مخزن و آزمون دستگاه دوم هنوز باقی‌اند.")
+    add_body(doc, "پیش از شروع هر دستگاه نسخهٔ آخر دریافت شود؛ پایان مرحله تغییرات بررسی، ثبت و ارسال شوند. ویرایش هم‌زمان سند Word در دو دستگاه انجام نشود. انتقال خودکار تاریخچهٔ خصوصی و خروجی رمزگذاری‌شده هنوز پیاده‌سازی نشده است.")
+    doc.save(OUT)
+
+
+if __name__ == "__main__":
+    build()
