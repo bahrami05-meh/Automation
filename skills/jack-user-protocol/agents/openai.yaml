@@ -1,0 +1,6 @@
+interface:
+  display_name: "پروتکل کاربر و جک"
+  short_description: "قواعد ارتباط و همکاری پروژه جک"
+  default_prompt: "Use $jack-user-protocol to apply or update the collaboration rules for the Jack project."
+policy:
+  allow_implicit_invocation: true
