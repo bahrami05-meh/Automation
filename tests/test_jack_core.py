@@ -3,6 +3,7 @@ import unittest
 from backend.jack_core import build_symbol_request, quality_supervisor
 from backend.agents.market_capture import MarketCaptureAgent
 from backend.agents.technical_analysis import TechnicalAnalysisAgent
+from backend.agents.chart_control import ChartControlAgent
 from backend.market_data import build_market_report
 
 
@@ -95,6 +96,28 @@ class QualitySupervisorTests(unittest.TestCase):
         result = TechnicalAnalysisAgent().analyze(build_symbol_request("اهرم"))
         self.assertEqual(result["technical_agent"]["status"], "SKIPPED")
         self.assertEqual(result["technical"]["overall_signal"], "NOT_AVAILABLE")
+
+    def test_chart_agent_conflict_blocks_jack_decision(self):
+        rows = [{"open": close - 1, "high": close + 1, "low": close - 2, "close": close, "volume": 1000} for close in range(100, 121)]
+        report = build_market_report({
+            "symbol": "فملی", "source": "https://www.tsetmc.com/market", "collected_at": "2026-09-20T12:00:00+03:30",
+            "timezone": "Asia/Tehran", "price_unit": "IRR", "price_type": "raw", "timeframe": "daily", "ohlcv": rows,
+        }, {"www.tsetmc.com"})
+        report = TechnicalAnalysisAgent().analyze(report)
+        result = ChartControlAgent({"www.tsetmc.com"}).inspect(report, {
+            "symbol": "فملی", "source": "https://www.tsetmc.com/chart", "collected_at": "2026-09-20T12:00:00+03:30",
+            "timezone": "Asia/Tehran", "timeframe": "daily",
+            "indicators": [{"name": "SMA", "direction": "bearish", "parameters": {"period": 20}}],
+        })
+        self.assertEqual(result["chart_control_agent"]["status"], "CHART_CONFLICT")
+        self.assertEqual(result["symbols"][0]["quality"]["status"], "QA_BLOCKED")
+        self.assertEqual(result["symbols"][0]["jack_decision"], "DATA_BLOCKED")
+
+    def test_chart_agent_skips_without_observation(self):
+        report = TechnicalAnalysisAgent().analyze(build_symbol_request("اهرم"))
+        result = ChartControlAgent({"www.tsetmc.com"}).inspect(report, None)
+        self.assertEqual(result["chart_control_agent"]["name"], "ایجنت کنترل نمودار")
+        self.assertEqual(result["chart_control"]["status"], "SKIPPED")
 
 
 if __name__ == "__main__":

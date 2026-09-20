@@ -16,6 +16,7 @@ sys.path.insert(0, str(ROOT))
 
 from backend.agents.market_capture import MarketCaptureAgent  # noqa: E402
 from backend.agents.technical_analysis import TechnicalAnalysisAgent  # noqa: E402
+from backend.agents.chart_control import ChartControlAgent  # noqa: E402
 from backend.jack_core import build_demo_report  # noqa: E402
 
 FRONTEND = ROOT / "frontend"
@@ -74,6 +75,7 @@ class JackHandler(BaseHTTPRequestHandler):
             self._send_json({"agents": [
                 {"name": "ایجنت دریافت", "id": "market-capture-agent", "version": "0.1", "status": "available"},
                 {"name": "ایجنت تکنیکال", "id": "technical-analysis-agent", "version": "0.1", "status": "available"},
+                {"name": "ایجنت کنترل نمودار", "id": "chart-control-agent", "version": "0.1", "status": "available"},
             ]})
         elif path in {"/", "/index.html"}:
             self._send_file("index.html")
@@ -96,12 +98,14 @@ class JackHandler(BaseHTTPRequestHandler):
                 if not isinstance(payload, dict) or not isinstance(payload.get("symbol"), str):
                     raise ValueError("نام نماد ارسال نشده است.")
                 report = self.server.market_capture_agent.request_symbol(payload["symbol"])
-                self._send_json(self.server.technical_analysis_agent.analyze(report))
+                report = self.server.technical_analysis_agent.analyze(report)
+                self._send_json(self.server.chart_control_agent.inspect(report, None))
             else:
                 if not isinstance(payload, dict) or not isinstance(payload.get("symbol"), str):
                     raise ValueError("نماد در بستهٔ دادهٔ بازار ارسال نشده است.")
                 report = self.server.market_capture_agent.capture_snapshot(payload["symbol"], payload)
-                self._send_json(self.server.technical_analysis_agent.analyze(report))
+                report = self.server.technical_analysis_agent.analyze(report)
+                self._send_json(self.server.chart_control_agent.inspect(report, payload.get("chart_observation")))
         except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as error:
             self._send_json({"error": str(error)}, HTTPStatus.BAD_REQUEST)
 
@@ -122,6 +126,7 @@ def main() -> None:
     server.allowed_source_hosts = load_allowed_source_hosts()
     server.market_capture_agent = MarketCaptureAgent(server.allowed_source_hosts)
     server.technical_analysis_agent = TechnicalAnalysisAgent()
+    server.chart_control_agent = ChartControlAgent(server.allowed_source_hosts)
     print(f"Jack is running at http://{args.host}:{args.port}")
     print("Demo mode only: no brokerage access, no orders, no private data storage.")
     try:
