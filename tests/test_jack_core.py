@@ -1,6 +1,6 @@
 import unittest
 
-from backend.jack_core import quality_supervisor
+from backend.jack_core import build_symbol_request, quality_supervisor
 
 
 class QualitySupervisorTests(unittest.TestCase):
@@ -25,6 +25,15 @@ class QualitySupervisorTests(unittest.TestCase):
         result = quality_supervisor([{"name": "RSI"}])
         self.assertEqual(result["status"], "QA_BLOCKED")
         self.assertIn("INDICATOR_INVALID", [item["code"] for item in result["findings"]])
+
+    def test_symbol_request_is_blocked_until_market_data_exists(self):
+        result = build_symbol_request("فولاد")
+        self.assertEqual(result["symbols"][0]["symbol"], "فولاد")
+        self.assertEqual(result["symbols"][0]["jack_decision"], "DATA_BLOCKED")
+
+    def test_invalid_symbol_is_rejected(self):
+        with self.assertRaises(ValueError):
+            build_symbol_request("<script>")
 
 
 if __name__ == "__main__":

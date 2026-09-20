@@ -7,10 +7,12 @@ from __future__ import annotations
 
 from collections import defaultdict
 from datetime import datetime, timezone
+import re
 from typing import Any
 
 
 VALID_DIRECTIONS = {"bullish", "bearish", "neutral"}
+SYMBOL_PATTERN = re.compile(r"^[A-Za-zآ-ی٠-٩۰-۹][A-Za-zآ-ی٠-٩۰-۹0-9 _-]{0,19}$")
 
 
 def _utc_now() -> str:
@@ -97,6 +99,30 @@ def build_demo_report() -> dict[str, Any]:
             "quality": qa,
             "jack_decision": "WATCHLIST" if qa["status"] == "QA_PASSED" else "DATA_BLOCKED",
             "reason": "نمونهٔ فنی برای بررسی زنجیرهٔ تحلیل؛ فاقد دادهٔ واقعی بازار و پرتفوی.",
+        }],
+        "disclaimer": "این خروجی صرفاً برای محیط آزمایشی است، اجرای زنده مجاز نیست و بررسی انسانی الزامی است.",
+    }
+
+
+def build_symbol_request(symbol: str) -> dict[str, Any]:
+    """اعتبارسنجی نام نماد؛ دریافت واقعی داده عمداً در این مرحله اجرا نمی‌شود."""
+    normalized = " ".join(symbol.strip().split())
+    if not SYMBOL_PATTERN.fullmatch(normalized):
+        raise ValueError("نام نماد باید ۱ تا ۲۰ نویسهٔ فارسی یا لاتین داشته باشد.")
+    return {
+        "project": "پروزه اتوماسیون بورسی",
+        "mode": "SYMBOL_REQUEST_ONLY",
+        "generated_at": _utc_now(),
+        "symbols": [{
+            "symbol": normalized,
+            "data_status": "DATA_BLOCKED",
+            "quality": {"status": "QA_BLOCKED", "findings": [{
+                "code": "MARKET_SOURCE_NOT_CONNECTED",
+                "severity": "blocker",
+                "message": "نماد ثبت شد، اما دریافت دادهٔ بازار و خواندن مرورگر هنوز به برنامه متصل نشده است.",
+            }]},
+            "jack_decision": "DATA_BLOCKED",
+            "reason": "برای جلوگیری از حدس‌زدن، تا دریافت دادهٔ معتبر هیچ تحلیل یا امتیازدهی انجام نمی‌شود.",
         }],
         "disclaimer": "این خروجی صرفاً برای محیط آزمایشی است، اجرای زنده مجاز نیست و بررسی انسانی الزامی است.",
     }

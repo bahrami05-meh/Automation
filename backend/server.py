@@ -13,7 +13,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from backend.jack_core import build_demo_report  # noqa: E402
+from backend.jack_core import build_demo_report, build_symbol_request  # noqa: E402
 
 FRONTEND = ROOT / "frontend"
 
@@ -56,6 +56,21 @@ class JackHandler(BaseHTTPRequestHandler):
             self._send_file(path.lstrip("/"))
         else:
             self.send_error(HTTPStatus.NOT_FOUND)
+
+    def do_POST(self) -> None:  # noqa: N802
+        if self.path.split("?", 1)[0] != "/api/symbol-request":
+            self.send_error(HTTPStatus.NOT_FOUND)
+            return
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+            if not 1 <= length <= 1024:
+                raise ValueError("اندازهٔ درخواست نامعتبر است.")
+            payload = json.loads(self.rfile.read(length).decode("utf-8"))
+            if not isinstance(payload, dict) or not isinstance(payload.get("symbol"), str):
+                raise ValueError("نام نماد ارسال نشده است.")
+            self._send_json(build_symbol_request(payload["symbol"]))
+        except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as error:
+            self._send_json({"error": str(error)}, HTTPStatus.BAD_REQUEST)
 
     def log_message(self, format: str, *args: object) -> None:
         print(f"[jack-local] {self.address_string()} - {format % args}")

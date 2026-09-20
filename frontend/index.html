@@ -15,7 +15,12 @@
       </header>
       <section class="panel controls">
         <div><strong>وضعیت سامانه</strong><span id="health" class="badge">در حال بررسی</span></div>
-        <button id="run-demo" type="button">اجرای تحلیل نمونه</button>
+        <form id="symbol-form">
+          <label for="symbol">نماد</label>
+          <input id="symbol" name="symbol" maxlength="20" placeholder="مثال: فولاد" autocomplete="off" required>
+          <button type="submit">بررسی نماد</button>
+        </form>
+        <button id="run-demo" type="button">نمایش نمونه</button>
       </section>
       <section id="empty" class="panel empty">برای مشاهدهٔ زنجیرهٔ اعتبارسنجی و ناظر کیفیت، «اجرای تحلیل نمونه» را بزنید.</section>
       <section id="report" hidden>
