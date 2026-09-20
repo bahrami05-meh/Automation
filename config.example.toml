@@ -13,3 +13,6 @@ reports = "reports"
 logs = "logs"
 sessions = "sessions"
 
+[market]
+# Only these public market-data hosts may be accepted by the local analysis endpoint.
+approved_source_hosts = ["tsetmc.com", "www.tsetmc.com"]

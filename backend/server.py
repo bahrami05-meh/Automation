@@ -9,13 +9,32 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 import sys
+import tomllib
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from backend.jack_core import build_demo_report, build_symbol_request  # noqa: E402
+from backend.market_data import build_market_report  # noqa: E402
 
 FRONTEND = ROOT / "frontend"
+
+
+def load_allowed_source_hosts() -> set[str]:
+    """فقط میزبان‌های مصوب پیکربندی محلی را برای دادهٔ بازار می‌پذیرد."""
+    config_path = ROOT / "config.local.toml"
+    with (ROOT / "config.example.toml").open("rb") as stream:
+        default_config = tomllib.load(stream)
+    config = default_config
+    if config_path.exists():
+        with config_path.open("rb") as stream:
+            local_config = tomllib.load(stream)
+        config = {**default_config, **local_config}
+        config["market"] = {**default_config.get("market", {}), **local_config.get("market", {})}
+    hosts = config.get("market", {}).get("approved_source_hosts", [])
+    if not isinstance(hosts, list) or not all(isinstance(host, str) and host for host in hosts):
+        raise ValueError("فهرست منابع بازار در تنظیمات محلی نامعتبر است.")
+    return {host.lower() for host in hosts}
 
 
 class JackHandler(BaseHTTPRequestHandler):
@@ -58,17 +77,21 @@ class JackHandler(BaseHTTPRequestHandler):
             self.send_error(HTTPStatus.NOT_FOUND)
 
     def do_POST(self) -> None:  # noqa: N802
-        if self.path.split("?", 1)[0] != "/api/symbol-request":
+        endpoint = self.path.split("?", 1)[0]
+        if endpoint not in {"/api/symbol-request", "/api/market-snapshot"}:
             self.send_error(HTTPStatus.NOT_FOUND)
             return
         try:
             length = int(self.headers.get("Content-Length", "0"))
-            if not 1 <= length <= 1024:
+            if not 1 <= length <= 262_144:
                 raise ValueError("اندازهٔ درخواست نامعتبر است.")
             payload = json.loads(self.rfile.read(length).decode("utf-8"))
-            if not isinstance(payload, dict) or not isinstance(payload.get("symbol"), str):
-                raise ValueError("نام نماد ارسال نشده است.")
-            self._send_json(build_symbol_request(payload["symbol"]))
+            if endpoint == "/api/symbol-request":
+                if not isinstance(payload, dict) or not isinstance(payload.get("symbol"), str):
+                    raise ValueError("نام نماد ارسال نشده است.")
+                self._send_json(build_symbol_request(payload["symbol"]))
+            else:
+                self._send_json(build_market_report(payload, self.server.allowed_source_hosts))
         except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as error:
             self._send_json({"error": str(error)}, HTTPStatus.BAD_REQUEST)
 
@@ -86,6 +109,7 @@ def main() -> None:
     if not 1024 <= args.port <= 65535:
         parser.error("Port must be between 1024 and 65535.")
     server = ThreadingHTTPServer((args.host, args.port), JackHandler)
+    server.allowed_source_hosts = load_allowed_source_hosts()
     print(f"Jack is running at http://{args.host}:{args.port}")
     print("Demo mode only: no brokerage access, no orders, no private data storage.")
     try:

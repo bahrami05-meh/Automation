@@ -28,6 +28,14 @@
         <article id="symbol-card" class="panel"></article>
         <p id="disclaimer" class="disclaimer"></p>
       </section>
+      <details class="panel">
+        <summary>ورود دادهٔ بازار از منبع تأییدشده</summary>
+        <p class="muted">برای آزمایش هستهٔ تحلیل، JSON دارای نماد، منبع HTTPS، زمان Asia/Tehran، واحد IRR/IRT، نوع قیمت و حداقل ۲۱ ردیف OHLCV را وارد کنید. این داده ذخیره نمی‌شود.</p>
+        <form id="snapshot-form">
+          <textarea id="snapshot" rows="10" spellcheck="false" placeholder='{"symbol":"فملی","source":"https://...","collected_at":"2026-09-20T12:00:00+03:30","timezone":"Asia/Tehran","price_unit":"IRR","price_type":"raw","timeframe":"daily","ohlcv":[...]}' required></textarea>
+          <button type="submit">اعتبارسنجی و تحلیل دادهٔ واردشده</button>
+        </form>
+      </details>
     </main>
     <script src="/app.js"></script>
   </body>

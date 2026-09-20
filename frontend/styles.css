@@ -10,6 +10,8 @@ h1 { margin:6px 0; font-size:clamp(1.7rem,4vw,2.5rem); }
 .controls { display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; }
 .controls div { display:flex; align-items:center; gap:10px; }
 form { display:flex; align-items:center; gap:8px; flex-wrap:wrap; } input { border:1px solid #42617e; border-radius:9px; padding:10px; background:#0f1924; color:#e8eef8; font:inherit; min-width:170px; }
+textarea { width:100%; border:1px solid #42617e; border-radius:9px; padding:10px; background:#0f1924; color:#e8eef8; font:13px Consolas, monospace; direction:ltr; text-align:left; }
+summary { cursor:pointer; font-weight:700; }
 button { border:0; border-radius:9px; padding:11px 16px; color:#07131f; background:#75d4ff; font:inherit; font-weight:700; cursor:pointer; }
 button:hover { background:#a0e2ff; }
 .badge { background:#31465b; border-radius:99px; padding:4px 9px; font-size:.86rem; }
