@@ -76,6 +76,8 @@ def _rsi(closes: list[float], period: int = 14) -> float:
     window = changes[-period:]
     gains = sum(max(change, 0) for change in window) / period
     losses = sum(max(-change, 0) for change in window) / period
+    if gains == 0 and losses == 0:
+        return 50.0
     if losses == 0:
         return 100.0
     relative_strength = gains / losses

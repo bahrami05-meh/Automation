@@ -33,8 +33,10 @@ function renderReport(payload) {
     <p>سیگنال: ${escapeHtml(item.direction)}</p></div>`).join('');
   const findings = (symbol.quality.findings || []).map((item) => `
     <div class="finding ${escapeHtml(item.severity)}"><strong>${escapeHtml(item.code)}</strong> — ${escapeHtml(item.message)}</div>`).join('') || '<p>موردی ثبت نشده است.</p>';
+  const agent = payload.agent ? `<p>ایجنت اجراکننده: <strong>${escapeHtml(payload.agent.name)}</strong> · وضعیت: ${escapeHtml(payload.agent.status)} · شناسه اجرا: ${escapeHtml(payload.agent.run_id)}</p>` : '';
   card.innerHTML = `<h2>نماد: ${escapeHtml(symbol.symbol)}</h2>
     <p>وضعیت داده: ${escapeHtml(symbol.data_status)}</p>
+    ${agent}
     <p>ناظر کیفیت: <strong>${escapeHtml(symbol.quality.status)}</strong>${symbol.quality.rule_version ? ` · نسخهٔ قانون: ${escapeHtml(symbol.quality.rule_version)}` : ''}</p>
     ${symbol.quality.score !== undefined ? `<p>امتیاز پس از سقف‌دهی خانواده‌ها: ${escapeHtml(symbol.quality.score)}</p>` : ''}
     <p class="decision">نتیجهٔ جک: ${escapeHtml(symbol.jack_decision)}</p>

@@ -14,8 +14,8 @@ import tomllib
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from backend.jack_core import build_demo_report, build_symbol_request  # noqa: E402
-from backend.market_data import build_market_report  # noqa: E402
+from backend.agents.market_capture import MarketCaptureAgent  # noqa: E402
+from backend.jack_core import build_demo_report  # noqa: E402
 
 FRONTEND = ROOT / "frontend"
 
@@ -69,6 +69,8 @@ class JackHandler(BaseHTTPRequestHandler):
             self._send_json({"status": "ok", "mode": "local-only"})
         elif path == "/api/demo-report":
             self._send_json(build_demo_report())
+        elif path == "/api/agent-status":
+            self._send_json({"agents": [{"name": "market-capture-agent", "version": "0.1", "status": "available"}]})
         elif path in {"/", "/index.html"}:
             self._send_file("index.html")
         elif path in {"/app.js", "/styles.css"}:
@@ -89,9 +91,11 @@ class JackHandler(BaseHTTPRequestHandler):
             if endpoint == "/api/symbol-request":
                 if not isinstance(payload, dict) or not isinstance(payload.get("symbol"), str):
                     raise ValueError("نام نماد ارسال نشده است.")
-                self._send_json(build_symbol_request(payload["symbol"]))
+                self._send_json(self.server.market_capture_agent.request_symbol(payload["symbol"]))
             else:
-                self._send_json(build_market_report(payload, self.server.allowed_source_hosts))
+                if not isinstance(payload, dict) or not isinstance(payload.get("symbol"), str):
+                    raise ValueError("نماد در بستهٔ دادهٔ بازار ارسال نشده است.")
+                self._send_json(self.server.market_capture_agent.capture_snapshot(payload["symbol"], payload))
         except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as error:
             self._send_json({"error": str(error)}, HTTPStatus.BAD_REQUEST)
 
@@ -110,6 +114,7 @@ def main() -> None:
         parser.error("Port must be between 1024 and 65535.")
     server = ThreadingHTTPServer((args.host, args.port), JackHandler)
     server.allowed_source_hosts = load_allowed_source_hosts()
+    server.market_capture_agent = MarketCaptureAgent(server.allowed_source_hosts)
     print(f"Jack is running at http://{args.host}:{args.port}")
     print("Demo mode only: no brokerage access, no orders, no private data storage.")
     try:
