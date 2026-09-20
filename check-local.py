@@ -39,10 +39,9 @@ def main():
     print('OK: local-only settings and project-relative paths.')
     print('OK: Git available.' if shutil.which('git') else 'MISSING: Git required for synchronization.')
     print('OK: Python 3.12.' if sys.version_info[:2] == (3, 12) else 'MISSING: use Python 3.12 on both devices.')
-    print('INFO: server and portfolio extraction are not implemented yet.')
+    print('INFO: local demo server is available; brokerage portfolio extraction is not implemented yet.')
     return 0 if shutil.which('git') and sys.version_info[:2] == (3, 12) else 1
 
 
 if __name__ == '__main__':
     raise SystemExit(main())
-

@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>جک | تحلیل آزمایشی پرتفوی</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <main class="shell">
+      <header>
+        <p class="eyebrow">پروزه اتوماسیون بورسی</p>
+        <h1>جک؛ داشبورد تحلیل آزمایشی</h1>
+        <p class="muted">اجرای محلی · بدون اتصال به کارگزاری · بدون سفارش‌گذاری</p>
+      </header>
+      <section class="panel controls">
+        <div><strong>وضعیت سامانه</strong><span id="health" class="badge">در حال بررسی</span></div>
+        <button id="run-demo" type="button">اجرای تحلیل نمونه</button>
+      </section>
+      <section id="empty" class="panel empty">برای مشاهدهٔ زنجیرهٔ اعتبارسنجی و ناظر کیفیت، «اجرای تحلیل نمونه» را بزنید.</section>
+      <section id="report" hidden>
+        <div class="notice">این خروجی با دادهٔ نمونه ساخته می‌شود و توصیهٔ مالی یا معامله نیست.</div>
+        <article id="symbol-card" class="panel"></article>
+        <p id="disclaimer" class="disclaimer"></p>
+      </section>
+    </main>
+    <script src="/app.js"></script>
+  </body>
+</html>
