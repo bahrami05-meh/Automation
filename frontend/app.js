@@ -41,13 +41,16 @@ function renderReport(payload) {
   const chart = payload.chart_control ? `<h3>خروجی ایجنت کنترل نمودار</h3>
     <p>وضعیت: <strong>${escapeHtml(payload.chart_control.status)}</strong></p>
     <p>${escapeHtml(payload.chart_control.reason || '')}</p>` : '';
+  const portfolio = payload.portfolio_capture ? `<h3>خروجی ایجنت مرورگر و پرتفوی</h3>
+    <p>وضعیت: <strong>${escapeHtml(payload.portfolio_capture.status)}</strong> · تعداد دارایی: ${escapeHtml(payload.portfolio_capture.holdings_count)}</p>
+    <p>${escapeHtml(payload.portfolio_capture.reason || '')}</p>` : '';
   card.innerHTML = `<h2>نماد: ${escapeHtml(symbol.symbol)}</h2>
     <p>وضعیت داده: ${escapeHtml(symbol.data_status)}</p>
     ${agentHtml}
     <p>ناظر کیفیت: <strong>${escapeHtml(symbol.quality.status)}</strong>${symbol.quality.rule_version ? ` · نسخهٔ قانون: ${escapeHtml(symbol.quality.rule_version)}` : ''}</p>
     ${symbol.quality.score !== undefined ? `<p>امتیاز پس از سقف‌دهی خانواده‌ها: ${escapeHtml(symbol.quality.score)}</p>` : ''}
     <p class="decision">نتیجهٔ جک: ${escapeHtml(symbol.jack_decision)}</p>
-    <p>${escapeHtml(symbol.reason)}</p>${technical}${chart}<h3>اندیکاتورها</h3><div class="grid">${indicatorHtml}</div>
+    <p>${escapeHtml(symbol.reason)}</p>${technical}${chart}${portfolio}<h3>اندیکاتورها</h3><div class="grid">${indicatorHtml}</div>
     <h3>یافته‌های ناظر کیفیت</h3>${findings}`;
   disclaimer.textContent = payload.disclaimer;
   empty.hidden = true;

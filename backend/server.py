@@ -17,13 +17,14 @@ sys.path.insert(0, str(ROOT))
 from backend.agents.market_capture import MarketCaptureAgent  # noqa: E402
 from backend.agents.technical_analysis import TechnicalAnalysisAgent  # noqa: E402
 from backend.agents.chart_control import ChartControlAgent  # noqa: E402
+from backend.agents.browser_portfolio import BrowserPortfolioAgent  # noqa: E402
 from backend.jack_core import build_demo_report  # noqa: E402
 
 FRONTEND = ROOT / "frontend"
 
 
-def load_allowed_source_hosts() -> set[str]:
-    """فقط میزبان‌های مصوب پیکربندی محلی را برای دادهٔ بازار می‌پذیرد."""
+def load_allowed_hosts(section: str) -> set[str]:
+    """فقط میزبان‌های مصوب هر منبع را از پیکربندی محلی می‌پذیرد."""
     config_path = ROOT / "config.local.toml"
     with (ROOT / "config.example.toml").open("rb") as stream:
         default_config = tomllib.load(stream)
@@ -33,10 +34,15 @@ def load_allowed_source_hosts() -> set[str]:
             local_config = tomllib.load(stream)
         config = {**default_config, **local_config}
         config["market"] = {**default_config.get("market", {}), **local_config.get("market", {})}
-    hosts = config.get("market", {}).get("approved_source_hosts", [])
+    hosts = config.get(section, {}).get("approved_hosts", [])
     if not isinstance(hosts, list) or not all(isinstance(host, str) and host for host in hosts):
-        raise ValueError("فهرست منابع بازار در تنظیمات محلی نامعتبر است.")
+        raise ValueError("فهرست میزبان‌های مصوب در تنظیمات محلی نامعتبر است.")
     return {host.lower() for host in hosts}
+
+
+def load_allowed_source_hosts() -> set[str]:
+    """سازگاری با نام تابع پیشینِ منابع دادهٔ بازار."""
+    return load_allowed_hosts("market")
 
 
 class JackHandler(BaseHTTPRequestHandler):
@@ -76,6 +82,7 @@ class JackHandler(BaseHTTPRequestHandler):
                 {"name": "ایجنت دریافت", "id": "market-capture-agent", "version": "0.1", "status": "available"},
                 {"name": "ایجنت تکنیکال", "id": "technical-analysis-agent", "version": "0.1", "status": "available"},
                 {"name": "ایجنت کنترل نمودار", "id": "chart-control-agent", "version": "0.1", "status": "available"},
+                {"name": "ایجنت مرورگر و پرتفوی", "id": "browser-portfolio-agent", "version": "0.1", "status": "available"},
             ]})
         elif path in {"/", "/index.html"}:
             self._send_file("index.html")
@@ -99,13 +106,15 @@ class JackHandler(BaseHTTPRequestHandler):
                     raise ValueError("نام نماد ارسال نشده است.")
                 report = self.server.market_capture_agent.request_symbol(payload["symbol"])
                 report = self.server.technical_analysis_agent.analyze(report)
-                self._send_json(self.server.chart_control_agent.inspect(report, None))
+                report = self.server.chart_control_agent.inspect(report, None)
+                self._send_json(self.server.browser_portfolio_agent.capture(report, None))
             else:
                 if not isinstance(payload, dict) or not isinstance(payload.get("symbol"), str):
                     raise ValueError("نماد در بستهٔ دادهٔ بازار ارسال نشده است.")
                 report = self.server.market_capture_agent.capture_snapshot(payload["symbol"], payload)
                 report = self.server.technical_analysis_agent.analyze(report)
-                self._send_json(self.server.chart_control_agent.inspect(report, payload.get("chart_observation")))
+                report = self.server.chart_control_agent.inspect(report, payload.get("chart_observation"))
+                self._send_json(self.server.browser_portfolio_agent.capture(report, payload.get("portfolio_observation")))
         except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as error:
             self._send_json({"error": str(error)}, HTTPStatus.BAD_REQUEST)
 
@@ -124,9 +133,11 @@ def main() -> None:
         parser.error("Port must be between 1024 and 65535.")
     server = ThreadingHTTPServer((args.host, args.port), JackHandler)
     server.allowed_source_hosts = load_allowed_source_hosts()
+    server.allowed_brokerage_hosts = load_allowed_hosts("brokerage")
     server.market_capture_agent = MarketCaptureAgent(server.allowed_source_hosts)
     server.technical_analysis_agent = TechnicalAnalysisAgent()
     server.chart_control_agent = ChartControlAgent(server.allowed_source_hosts)
+    server.browser_portfolio_agent = BrowserPortfolioAgent(server.allowed_brokerage_hosts)
     print(f"Jack is running at http://{args.host}:{args.port}")
     print("Demo mode only: no brokerage access, no orders, no private data storage.")
     try:

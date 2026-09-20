@@ -4,6 +4,7 @@ from backend.jack_core import build_symbol_request, quality_supervisor
 from backend.agents.market_capture import MarketCaptureAgent
 from backend.agents.technical_analysis import TechnicalAnalysisAgent
 from backend.agents.chart_control import ChartControlAgent
+from backend.agents.browser_portfolio import BrowserPortfolioAgent
 from backend.market_data import build_market_report
 
 
@@ -118,6 +119,24 @@ class QualitySupervisorTests(unittest.TestCase):
         result = ChartControlAgent({"www.tsetmc.com"}).inspect(report, None)
         self.assertEqual(result["chart_control_agent"]["name"], "ایجنت کنترل نمودار")
         self.assertEqual(result["chart_control"]["status"], "SKIPPED")
+
+    def test_browser_portfolio_agent_captures_visible_rows_without_sensitive_fields(self):
+        report = build_symbol_request("فملی")
+        result = BrowserPortfolioAgent({"broker.example"}).capture(report, {
+            "source": "https://broker.example/portfolio", "collected_at": "2026-09-20T12:00:00+03:30",
+            "timezone": "Asia/Tehran", "price_unit": "IRR",
+            "holdings": [{"symbol": "فملی", "quantity": 100, "average_price": 1200, "last_price": 1300, "market_value": 130000}],
+        })
+        self.assertEqual(result["browser_portfolio_agent"]["status"], "PORTFOLIO_CAPTURED")
+        self.assertEqual(result["portfolio_capture"]["holdings_count"], 1)
+
+    def test_browser_portfolio_agent_blocks_sensitive_fields(self):
+        result = BrowserPortfolioAgent({"broker.example"}).capture(build_symbol_request("فملی"), {
+            "source": "https://broker.example/portfolio", "collected_at": "2026-09-20T12:00:00+03:30",
+            "timezone": "Asia/Tehran", "price_unit": "IRR", "token": "not-allowed",
+            "holdings": [{"symbol": "فملی", "quantity": 100, "average_price": 1200, "last_price": 1300, "market_value": 130000}],
+        })
+        self.assertEqual(result["browser_portfolio_agent"]["status"], "PORTFOLIO_BLOCKED")
 
 
 if __name__ == "__main__":

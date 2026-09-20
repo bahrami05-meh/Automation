@@ -15,4 +15,8 @@ sessions = "sessions"
 
 [market]
 # Only these public market-data hosts may be accepted by the local analysis endpoint.
-approved_source_hosts = ["tsetmc.com", "www.tsetmc.com"]
+approved_hosts = ["tsetmc.com", "www.tsetmc.com"]
+
+[brokerage]
+# Add only the user's brokerage host in config.local.toml; leave empty in Git.
+approved_hosts = []
