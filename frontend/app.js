@@ -33,14 +33,18 @@ function renderReport(payload) {
     <p>سیگنال: ${escapeHtml(item.direction)}</p></div>`).join('');
   const findings = (symbol.quality.findings || []).map((item) => `
     <div class="finding ${escapeHtml(item.severity)}"><strong>${escapeHtml(item.code)}</strong> — ${escapeHtml(item.message)}</div>`).join('') || '<p>موردی ثبت نشده است.</p>';
-  const agent = payload.agent ? `<p>ایجنت اجراکننده: <strong>${escapeHtml(payload.agent.name)}</strong> · وضعیت: ${escapeHtml(payload.agent.status)} · شناسه اجرا: ${escapeHtml(payload.agent.run_id)}</p>` : '';
+  const agents = payload.agents || (payload.agent ? [payload.agent] : []);
+  const agentHtml = agents.map((agent) => `<p>ایجنت: <strong>${escapeHtml(agent.name)}</strong> · وضعیت: ${escapeHtml(agent.status)} · شناسه اجرا: ${escapeHtml(agent.run_id)}</p>`).join('');
+  const technical = payload.technical ? `<h3>خروجی ایجنت تکنیکال</h3>
+    <p>وضعیت: <strong>${escapeHtml(payload.technical.status)}</strong> · سیگنال فنی: ${escapeHtml(payload.technical.overall_signal)}</p>
+    <p>${escapeHtml(payload.technical.summary || payload.technical.reason || '')}</p>` : '';
   card.innerHTML = `<h2>نماد: ${escapeHtml(symbol.symbol)}</h2>
     <p>وضعیت داده: ${escapeHtml(symbol.data_status)}</p>
-    ${agent}
+    ${agentHtml}
     <p>ناظر کیفیت: <strong>${escapeHtml(symbol.quality.status)}</strong>${symbol.quality.rule_version ? ` · نسخهٔ قانون: ${escapeHtml(symbol.quality.rule_version)}` : ''}</p>
     ${symbol.quality.score !== undefined ? `<p>امتیاز پس از سقف‌دهی خانواده‌ها: ${escapeHtml(symbol.quality.score)}</p>` : ''}
     <p class="decision">نتیجهٔ جک: ${escapeHtml(symbol.jack_decision)}</p>
-    <p>${escapeHtml(symbol.reason)}</p><h3>اندیکاتورها</h3><div class="grid">${indicatorHtml}</div>
+    <p>${escapeHtml(symbol.reason)}</p>${technical}<h3>اندیکاتورها</h3><div class="grid">${indicatorHtml}</div>
     <h3>یافته‌های ناظر کیفیت</h3>${findings}`;
   disclaimer.textContent = payload.disclaimer;
   empty.hidden = true;

@@ -2,6 +2,7 @@ import unittest
 
 from backend.jack_core import build_symbol_request, quality_supervisor
 from backend.agents.market_capture import MarketCaptureAgent
+from backend.agents.technical_analysis import TechnicalAnalysisAgent
 from backend.market_data import build_market_report
 
 
@@ -77,6 +78,23 @@ class QualitySupervisorTests(unittest.TestCase):
         }, {"www.tsetmc.com"})
         rsi = next(item for item in report["symbols"][0]["indicators"] if item["name"] == "RSI")
         self.assertEqual(rsi["parameters"]["value"], 50.0)
+
+    def test_technical_agent_analyzes_valid_capture_without_trade_decision(self):
+        rows = [{"open": close - 1, "high": close + 1, "low": close - 2, "close": close, "volume": 1000} for close in range(100, 121)]
+        report = build_market_report({
+            "symbol": "فملی", "source": "https://www.tsetmc.com/market", "collected_at": "2026-09-20T12:00:00+03:30",
+            "timezone": "Asia/Tehran", "price_unit": "IRR", "price_type": "raw", "timeframe": "daily", "ohlcv": rows,
+        }, {"www.tsetmc.com"})
+        result = TechnicalAnalysisAgent().analyze(report)
+        self.assertEqual(result["technical_agent"]["name"], "ایجنت تکنیکال")
+        self.assertEqual(result["technical"]["status"], "ANALYZED")
+        self.assertEqual(result["technical"]["overall_signal"], "ALIGNED_BULLISH")
+        self.assertEqual(result["symbols"][0]["jack_decision"], "WATCHLIST")
+
+    def test_technical_agent_skips_blocked_data(self):
+        result = TechnicalAnalysisAgent().analyze(build_symbol_request("اهرم"))
+        self.assertEqual(result["technical_agent"]["status"], "SKIPPED")
+        self.assertEqual(result["technical"]["overall_signal"], "NOT_AVAILABLE")
 
 
 if __name__ == "__main__":
