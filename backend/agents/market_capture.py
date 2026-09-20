@@ -14,7 +14,8 @@ from backend.jack_core import build_symbol_request
 from backend.market_data import build_market_report
 
 
-AGENT_NAME = "market-capture-agent"
+AGENT_NAME = "ایجنت دریافت"
+AGENT_ID = "market-capture-agent"
 AGENT_VERSION = "0.1"
 TEHRAN = timezone(timedelta(hours=3, minutes=30), "Asia/Tehran")
 
@@ -22,6 +23,7 @@ TEHRAN = timezone(timedelta(hours=3, minutes=30), "Asia/Tehran")
 def _run_metadata() -> dict[str, str]:
     return {
         "name": AGENT_NAME,
+        "id": AGENT_ID,
         "version": AGENT_VERSION,
         "run_id": f"mca-{uuid4().hex}",
         "started_at": datetime.now(TEHRAN).isoformat(timespec="seconds"),

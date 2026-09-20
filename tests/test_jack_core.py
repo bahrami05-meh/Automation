@@ -61,6 +61,7 @@ class QualitySupervisorTests(unittest.TestCase):
             "symbol": "فملی", "source": "https://www.tsetmc.com/market", "collected_at": "2026-09-20T12:00:00+03:30",
             "timezone": "Asia/Tehran", "price_unit": "IRR", "price_type": "raw", "timeframe": "daily", "ohlcv": rows,
         })
+        self.assertEqual(report["agent"]["name"], "ایجنت دریافت")
         self.assertEqual(report["agent"]["status"], "CAPTURED")
         self.assertTrue(report["agent"]["run_id"].startswith("mca-"))
 

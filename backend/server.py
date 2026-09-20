@@ -70,7 +70,7 @@ class JackHandler(BaseHTTPRequestHandler):
         elif path == "/api/demo-report":
             self._send_json(build_demo_report())
         elif path == "/api/agent-status":
-            self._send_json({"agents": [{"name": "market-capture-agent", "version": "0.1", "status": "available"}]})
+            self._send_json({"agents": [{"name": "ایجنت دریافت", "id": "market-capture-agent", "version": "0.1", "status": "available"}]})
         elif path in {"/", "/index.html"}:
             self._send_file("index.html")
         elif path in {"/app.js", "/styles.css"}:
