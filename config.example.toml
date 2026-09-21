@@ -17,6 +17,10 @@ sessions = "sessions"
 # Only these public market-data hosts may be accepted by the local analysis endpoint.
 approved_hosts = ["tsetmc.com", "www.tsetmc.com"]
 
+[fundamental]
+# Only official disclosure hosts may be accepted by the local fundamental endpoint.
+approved_hosts = ["codal.ir", "www.codal.ir"]
+
 [brokerage]
 # Add only the user's brokerage host in config.local.toml; leave empty in Git.
 approved_hosts = []

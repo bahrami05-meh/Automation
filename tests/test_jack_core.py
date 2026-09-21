@@ -6,6 +6,7 @@ from backend.agents.technical_analysis import TechnicalAnalysisAgent
 from backend.agents.chart_control import ChartControlAgent
 from backend.agents.browser_portfolio import BrowserPortfolioAgent
 from backend.agents.market_board import MarketBoardAgent
+from backend.agents.fundamental import FundamentalAgent
 from backend.market_data import build_market_report
 
 
@@ -170,6 +171,37 @@ class QualitySupervisorTests(unittest.TestCase):
         self.assertEqual(result["market_board_agent"]["status"], "MARKET_SUSPENDED")
         self.assertEqual(result["symbols"][0]["quality"]["status"], "QA_BLOCKED")
         self.assertEqual(result["symbols"][0]["jack_decision"], "DATA_BLOCKED")
+
+    def test_fundamental_agent_observes_official_data_without_trade_decision(self):
+        rows = [{"open": close - 1, "high": close + 1, "low": close - 2, "close": close, "volume": 1000} for close in range(100, 121)]
+        report = build_market_report({
+            "symbol": "فملی", "source": "https://www.tsetmc.com/market", "collected_at": "2026-09-21T11:40:00+03:30",
+            "timezone": "Asia/Tehran", "price_unit": "IRR", "price_type": "raw", "timeframe": "daily", "ohlcv": rows,
+        }, {"www.tsetmc.com"})
+        result = FundamentalAgent({"www.codal.ir"}).inspect(report, {
+            "symbol": "فملی", "source": "https://www.codal.ir/report", "collected_at": "2026-09-21T11:40:00+03:30",
+            "timezone": "Asia/Tehran", "fiscal_year_end": "1405/12/29", "financial_unit": "IRR",
+            "revenue": 1000, "net_profit": 200, "operating_margin_percent": 25, "price_to_earnings": 6.2,
+            "debt_to_equity": 0.8, "events": [{"event_type": "financial_statement", "published_at": "2026-09-20T10:00:00+03:30"}],
+        })
+        self.assertEqual(result["fundamental_agent"]["status"], "OBSERVED")
+        self.assertEqual(result["fundamental"]["metrics"]["net_margin_percent"], 20.0)
+        self.assertEqual(result["symbols"][0]["jack_decision"], "WATCHLIST")
+
+    def test_fundamental_agent_blocks_unapproved_source(self):
+        rows = [{"open": close - 1, "high": close + 1, "low": close - 2, "close": close, "volume": 1000} for close in range(100, 121)]
+        report = build_market_report({
+            "symbol": "فملی", "source": "https://www.tsetmc.com/market", "collected_at": "2026-09-21T11:40:00+03:30",
+            "timezone": "Asia/Tehran", "price_unit": "IRR", "price_type": "raw", "timeframe": "daily", "ohlcv": rows,
+        }, {"www.tsetmc.com"})
+        result = FundamentalAgent({"www.codal.ir"}).inspect(report, {
+            "symbol": "فملی", "source": "https://example.com/report", "collected_at": "2026-09-21T11:40:00+03:30",
+            "timezone": "Asia/Tehran", "fiscal_year_end": "1405/12/29", "financial_unit": "IRR",
+            "revenue": 1000, "net_profit": 200, "operating_margin_percent": 25, "price_to_earnings": 6.2,
+            "debt_to_equity": 0.8, "events": [],
+        })
+        self.assertEqual(result["fundamental_agent"]["status"], "FUNDAMENTAL_BLOCKED")
+        self.assertEqual(result["symbols"][0]["quality"]["status"], "QA_BLOCKED")
 
 
 if __name__ == "__main__":
