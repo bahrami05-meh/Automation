@@ -7,6 +7,7 @@ from backend.agents.chart_control import ChartControlAgent
 from backend.agents.browser_portfolio import BrowserPortfolioAgent
 from backend.agents.market_board import MarketBoardAgent
 from backend.agents.fundamental import FundamentalAgent
+from backend.agents.portfolio_risk import PortfolioRiskAgent
 from backend.market_data import build_market_report
 
 
@@ -202,6 +203,13 @@ class QualitySupervisorTests(unittest.TestCase):
         })
         self.assertEqual(result["fundamental_agent"]["status"], "FUNDAMENTAL_BLOCKED")
         self.assertEqual(result["symbols"][0]["quality"]["status"], "QA_BLOCKED")
+
+    def test_portfolio_risk_agent_calculates_one_step_cap(self):
+        rows = [{"open": close - 1, "high": close + 1, "low": close - 2, "close": close, "volume": 1000} for close in range(100, 121)]
+        report = build_market_report({"symbol": "فملی", "source": "https://www.tsetmc.com/market", "collected_at": "2026-09-21T11:40:00+03:30", "timezone": "Asia/Tehran", "price_unit": "IRR", "price_type": "raw", "timeframe": "daily", "ohlcv": rows}, {"www.tsetmc.com"})
+        result = PortfolioRiskAgent().inspect(report, {"symbol": "فملی", "price_unit": "IRR", "account_equity": 1000000, "available_cash": 500000, "risk_percent": 1, "entry_price": 1000, "stop_loss": 950, "fee_per_unit": 2, "slippage_per_unit": 3, "liquidity_cap_quantity": 1000})
+        self.assertEqual(result["portfolio_risk_agent"]["status"], "OBSERVED")
+        self.assertEqual(result["portfolio_risk"]["metrics"]["max_single_step_quantity"], 181)
 
 
 if __name__ == "__main__":

@@ -52,13 +52,14 @@ function renderReport(payload) {
     <p>وضعیت: <strong>${escapeHtml(payload.fundamental.status)}</strong></p>
     <p>${escapeHtml(payload.fundamental.reason || '')}</p>
     ${payload.fundamental.metrics ? `<p>حاشیهٔ سود خالص: ${escapeHtml(payload.fundamental.metrics.net_margin_percent)}٪ · وضعیت سود: ${escapeHtml(payload.fundamental.metrics.earnings_state)} · وضعیت اهرم: ${escapeHtml(payload.fundamental.metrics.leverage_state)}</p>` : ''}` : '';
+  const risk = payload.portfolio_risk ? `<h3>خروجی ایجنت ریسک پرتفوی</h3><p>وضعیت: <strong>${escapeHtml(payload.portfolio_risk.status)}</strong></p><p>${escapeHtml(payload.portfolio_risk.reason || '')}</p>${payload.portfolio_risk.metrics ? `<p>سقف یک پلهٔ آزمایشی: ${escapeHtml(payload.portfolio_risk.metrics.max_single_step_quantity)}</p>` : ''}` : '';
   card.innerHTML = `<h2>نماد: ${escapeHtml(symbol.symbol)}</h2>
     <p>وضعیت داده: ${escapeHtml(symbol.data_status)}</p>
     ${agentHtml}
     <p>ناظر کیفیت: <strong>${escapeHtml(symbol.quality.status)}</strong>${symbol.quality.rule_version ? ` · نسخهٔ قانون: ${escapeHtml(symbol.quality.rule_version)}` : ''}</p>
     ${symbol.quality.score !== undefined ? `<p>امتیاز پس از سقف‌دهی خانواده‌ها: ${escapeHtml(symbol.quality.score)}</p>` : ''}
     <p class="decision">نتیجهٔ جک: ${escapeHtml(symbol.jack_decision)}</p>
-    <p>${escapeHtml(symbol.reason)}</p>${technical}${chart}${board}${fundamental}${portfolio}<h3>اندیکاتورها</h3><div class="grid">${indicatorHtml}</div>
+    <p>${escapeHtml(symbol.reason)}</p>${technical}${chart}${board}${fundamental}${risk}${portfolio}<h3>اندیکاتورها</h3><div class="grid">${indicatorHtml}</div>
     <h3>یافته‌های ناظر کیفیت</h3>${findings}`;
   disclaimer.textContent = payload.disclaimer;
   empty.hidden = true;

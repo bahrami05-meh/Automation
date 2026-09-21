@@ -20,6 +20,7 @@ from backend.agents.chart_control import ChartControlAgent  # noqa: E402
 from backend.agents.browser_portfolio import BrowserPortfolioAgent  # noqa: E402
 from backend.agents.market_board import MarketBoardAgent  # noqa: E402
 from backend.agents.fundamental import FundamentalAgent  # noqa: E402
+from backend.agents.portfolio_risk import PortfolioRiskAgent  # noqa: E402
 from backend.jack_core import build_demo_report  # noqa: E402
 
 FRONTEND = ROOT / "frontend"
@@ -87,6 +88,7 @@ class JackHandler(BaseHTTPRequestHandler):
                 {"name": "ایجنت مرورگر و پرتفوی", "id": "browser-portfolio-agent", "version": "0.1", "status": "available"},
                 {"name": "ایجنت تابلو", "id": "market-board-agent", "version": "0.1", "status": "available"},
                 {"name": "ایجنت بنیادی", "id": "fundamental-agent", "version": "0.1", "status": "available"},
+                {"name": "ایجنت ریسک پرتفوی", "id": "portfolio-risk-agent", "version": "0.1", "status": "available"},
             ]})
         elif path in {"/", "/index.html"}:
             self._send_file("index.html")
@@ -113,6 +115,7 @@ class JackHandler(BaseHTTPRequestHandler):
                 report = self.server.chart_control_agent.inspect(report, None)
                 report = self.server.market_board_agent.inspect(report, None)
                 report = self.server.fundamental_agent.inspect(report, None)
+                report = self.server.portfolio_risk_agent.inspect(report, None)
                 self._send_json(self.server.browser_portfolio_agent.capture(report, None))
             else:
                 if not isinstance(payload, dict) or not isinstance(payload.get("symbol"), str):
@@ -122,6 +125,7 @@ class JackHandler(BaseHTTPRequestHandler):
                 report = self.server.chart_control_agent.inspect(report, payload.get("chart_observation"))
                 report = self.server.market_board_agent.inspect(report, payload.get("market_board_observation"))
                 report = self.server.fundamental_agent.inspect(report, payload.get("fundamental_observation"))
+                report = self.server.portfolio_risk_agent.inspect(report, payload.get("risk_observation"))
                 self._send_json(self.server.browser_portfolio_agent.capture(report, payload.get("portfolio_observation")))
         except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as error:
             self._send_json({"error": str(error)}, HTTPStatus.BAD_REQUEST)
@@ -147,6 +151,7 @@ def main() -> None:
     server.chart_control_agent = ChartControlAgent(server.allowed_source_hosts)
     server.market_board_agent = MarketBoardAgent(server.allowed_source_hosts)
     server.fundamental_agent = FundamentalAgent(load_allowed_hosts("fundamental"))
+    server.portfolio_risk_agent = PortfolioRiskAgent()
     server.browser_portfolio_agent = BrowserPortfolioAgent(server.allowed_brokerage_hosts)
     print(f"Jack is running at http://{args.host}:{args.port}")
     print("Demo mode only: no brokerage access, no orders, no private data storage.")
