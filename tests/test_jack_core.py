@@ -5,6 +5,7 @@ from backend.agents.market_capture import MarketCaptureAgent
 from backend.agents.technical_analysis import TechnicalAnalysisAgent
 from backend.agents.chart_control import ChartControlAgent
 from backend.agents.browser_portfolio import BrowserPortfolioAgent
+from backend.agents.market_board import MarketBoardAgent
 from backend.market_data import build_market_report
 
 
@@ -137,6 +138,38 @@ class QualitySupervisorTests(unittest.TestCase):
             "holdings": [{"symbol": "فملی", "quantity": 100, "average_price": 1200, "last_price": 1300, "market_value": 130000}],
         })
         self.assertEqual(result["browser_portfolio_agent"]["status"], "PORTFOLIO_BLOCKED")
+
+    def test_market_board_agent_observes_valid_open_market_data(self):
+        rows = [{"open": close - 1, "high": close + 1, "low": close - 2, "close": close, "volume": 1000} for close in range(100, 121)]
+        report = build_market_report({
+            "symbol": "فملی", "source": "https://www.tsetmc.com/market", "collected_at": "2026-09-21T11:40:00+03:30",
+            "timezone": "Asia/Tehran", "price_unit": "IRR", "price_type": "raw", "timeframe": "daily", "ohlcv": rows,
+        }, {"www.tsetmc.com"})
+        result = MarketBoardAgent({"www.tsetmc.com"}).inspect(report, {
+            "symbol": "فملی", "source": "https://www.tsetmc.com/board", "collected_at": "2026-09-21T11:40:00+03:30",
+            "timezone": "Asia/Tehran", "price_unit": "IRR", "market_status": "open", "last_price": 120,
+            "volume": 1500, "average_volume_20": 1000, "individual_buy_volume": 800, "individual_sell_volume": 500,
+            "legal_buy_volume": 200, "legal_sell_volume": 400, "buy_queue_value": 300000, "sell_queue_value": 100000,
+        })
+        self.assertEqual(result["market_board_agent"]["status"], "OBSERVED")
+        self.assertEqual(result["market_board"]["metrics"]["volume_state"], "ABOVE_AVERAGE")
+        self.assertEqual(result["market_board"]["metrics"]["queue_state"], "BUY_QUEUE_DOMINANT")
+
+    def test_market_board_agent_blocks_suspended_symbol(self):
+        rows = [{"open": close - 1, "high": close + 1, "low": close - 2, "close": close, "volume": 1000} for close in range(100, 121)]
+        report = build_market_report({
+            "symbol": "فملی", "source": "https://www.tsetmc.com/market", "collected_at": "2026-09-21T11:40:00+03:30",
+            "timezone": "Asia/Tehran", "price_unit": "IRR", "price_type": "raw", "timeframe": "daily", "ohlcv": rows,
+        }, {"www.tsetmc.com"})
+        result = MarketBoardAgent({"www.tsetmc.com"}).inspect(report, {
+            "symbol": "فملی", "source": "https://www.tsetmc.com/board", "collected_at": "2026-09-21T11:40:00+03:30",
+            "timezone": "Asia/Tehran", "price_unit": "IRR", "market_status": "suspended", "last_price": 120,
+            "volume": 0, "average_volume_20": 1000, "individual_buy_volume": 0, "individual_sell_volume": 0,
+            "legal_buy_volume": 0, "legal_sell_volume": 0, "buy_queue_value": 0, "sell_queue_value": 0,
+        })
+        self.assertEqual(result["market_board_agent"]["status"], "MARKET_SUSPENDED")
+        self.assertEqual(result["symbols"][0]["quality"]["status"], "QA_BLOCKED")
+        self.assertEqual(result["symbols"][0]["jack_decision"], "DATA_BLOCKED")
 
 
 if __name__ == "__main__":
