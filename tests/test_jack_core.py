@@ -222,7 +222,7 @@ class QualitySupervisorTests(unittest.TestCase):
 
     def test_quality_supervisor_agent_passes_consistent_report(self):
         rows = [{"open": close - 1, "high": close + 1, "low": close - 2, "close": close, "volume": 1000} for close in range(100, 121)]
-        report = build_market_report({"symbol": "فملی", "source": "https://www.tsetmc.com/market", "collected_at": "2026-09-21T11:40:00+03:30", "timezone": "Asia/Tehran", "price_unit": "IRR", "price_type": "raw", "timeframe": "daily", "ohlcv": rows}, {"www.tsetmc.com})
+        report = build_market_report({"symbol": "فملی", "source": "https://www.tsetmc.com/market", "collected_at": "2026-09-21T11:40:00+03:30", "timezone": "Asia/Tehran", "price_unit": "IRR", "price_type": "raw", "timeframe": "daily", "ohlcv": rows}, {"www.tsetmc.com"})
         result = QualitySupervisorAgent().inspect(report)
         self.assertEqual(result["quality_supervisor"]["status"], "QA_PASSED")
         self.assertEqual(result["quality_supervisor_agent"]["status"], "QA_PASSED")
