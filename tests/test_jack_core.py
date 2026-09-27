@@ -9,6 +9,7 @@ from backend.agents.market_board import MarketBoardAgent
 from backend.agents.fundamental import FundamentalAgent
 from backend.agents.portfolio_risk import PortfolioRiskAgent
 from backend.agents.quality_supervisor import QualitySupervisorAgent
+from backend.browser_bridge import validate_browser_payload
 from backend.market_data import build_market_report
 
 
@@ -226,6 +227,10 @@ class QualitySupervisorTests(unittest.TestCase):
         result = QualitySupervisorAgent().inspect(report)
         self.assertEqual(result["quality_supervisor"]["status"], "QA_PASSED")
         self.assertEqual(result["quality_supervisor_agent"]["status"], "QA_PASSED")
+
+    def test_browser_bridge_rejects_sensitive_payload(self):
+        with self.assertRaises(ValueError):
+            validate_browser_payload({"symbol": "فملی", "password": "x", "market_snapshot": {"symbol": "فملی"}})
 
 
 if __name__ == "__main__":

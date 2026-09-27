@@ -22,6 +22,7 @@ from backend.agents.market_board import MarketBoardAgent  # noqa: E402
 from backend.agents.fundamental import FundamentalAgent  # noqa: E402
 from backend.agents.portfolio_risk import PortfolioRiskAgent  # noqa: E402
 from backend.agents.quality_supervisor import QualitySupervisorAgent  # noqa: E402
+from backend.browser_bridge import validate_browser_payload  # noqa: E402
 from backend.jack_core import build_demo_report  # noqa: E402
 
 FRONTEND = ROOT / "frontend"
@@ -101,7 +102,7 @@ class JackHandler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:  # noqa: N802
         endpoint = self.path.split("?", 1)[0]
-        if endpoint not in {"/api/symbol-request", "/api/market-snapshot"}:
+        if endpoint not in {"/api/symbol-request", "/api/market-snapshot", "/api/browser-observation"}:
             self.send_error(HTTPStatus.NOT_FOUND)
             return
         try:
@@ -109,7 +110,18 @@ class JackHandler(BaseHTTPRequestHandler):
             if not 1 <= length <= 262_144:
                 raise ValueError("اندازهٔ درخواست نامعتبر است.")
             payload = json.loads(self.rfile.read(length).decode("utf-8"))
-            if endpoint == "/api/symbol-request":
+            if endpoint == "/api/browser-observation":
+                browser_payload = validate_browser_payload(payload)
+                symbol = browser_payload["symbol"]
+                report = self.server.market_capture_agent.capture_snapshot(symbol, browser_payload["market_snapshot"])
+                report = self.server.technical_analysis_agent.analyze(report)
+                report = self.server.chart_control_agent.inspect(report, browser_payload.get("chart_observation"))
+                report = self.server.market_board_agent.inspect(report, browser_payload.get("market_board_observation"))
+                report = self.server.fundamental_agent.inspect(report, browser_payload.get("fundamental_observation"))
+                report = self.server.portfolio_risk_agent.inspect(report, browser_payload.get("risk_observation"))
+                report = self.server.quality_supervisor_agent.inspect(report)
+                self._send_json(self.server.browser_portfolio_agent.capture(report, browser_payload.get("portfolio_observation")))
+            elif endpoint == "/api/symbol-request":
                 if not isinstance(payload, dict) or not isinstance(payload.get("symbol"), str):
                     raise ValueError("نام نماد ارسال نشده است.")
                 report = self.server.market_capture_agent.request_symbol(payload["symbol"])
