@@ -13,7 +13,7 @@ class QualitySupervisorAgent:
         findings = []
         recalculated = quality_supervisor(symbol.get("indicators", []))
         findings.extend(recalculated.get("findings", []))
-        if symbol.get("quality", {}).get("status") != recalculated.get("status"):
+        if symbol.get("data_status") == "VALID" and symbol.get("quality", {}).get("status") != recalculated.get("status"):
             findings.append({"code": "QUALITY_STATUS_MISMATCH", "severity": "blocker", "message": "وضعیت کیفیت اولیه با بازاجرای مستقل یکسان نیست."})
         for key in ("technical_agent", "market_board_agent", "fundamental_agent", "portfolio_risk_agent"):
             if report.get(key, {}).get("status") in {"BOARD_BLOCKED", "FUNDAMENTAL_BLOCKED", "RISK_BLOCKED", "CHART_CONFLICT"}:
