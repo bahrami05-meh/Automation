@@ -19,7 +19,9 @@ class QualitySupervisorAgent:
             if report.get(key, {}).get("status") in {"BOARD_BLOCKED", "FUNDAMENTAL_BLOCKED", "RISK_BLOCKED", "CHART_CONFLICT"}:
                 findings.append({"code": "SPECIALIST_BLOCKED", "severity": "blocker", "message": f"خروجی {key} مسدود است."})
         blockers = [item for item in findings if item.get("severity") == "blocker"]
-        status = "QA_BLOCKED" if blockers else "QA_PASSED"
+        if symbol.get("data_status") != "VALID":
+            findings.append({"code": "UPSTREAM_DATA_BLOCKED", "severity": "blocker", "message": "منبع یا دادهٔ معتبر بازار هنوز به بستهٔ تحلیل نرسیده است."})
+        status = "QA_BLOCKED" if blockers or symbol.get("data_status") != "VALID" else "QA_PASSED"
         report["quality_supervisor"] = {"status": status, "rule_version": "JUP-009/JUP-010", "recalculated": recalculated, "findings": findings}
         report["quality_supervisor_agent"] = agent | {"status": status}
         report["agents"] = list(report.get("agents", [])) + [report["quality_supervisor_agent"]]
