@@ -1,0 +1,13 @@
+{
+  "manifest_version": 3,
+  "name": "Jack Read-Only Market Reader",
+  "version": "0.1.0",
+  "description": "پروزه اتوماسیون بورسی — خوانندهٔ فقط‌خواندنی دادهٔ قابل‌مشاهده.",
+  "permissions": [],
+  "host_permissions": ["https://d.easytrader.ir/*", "https://tsetmc.com/*", "https://www.tsetmc.com/*"],
+  "content_scripts": [{
+    "matches": ["https://d.easytrader.ir/*", "https://tsetmc.com/*", "https://www.tsetmc.com/*"],
+    "js": ["content.js"],
+    "run_at": "document_idle"
+  }]
+}
