@@ -102,6 +102,19 @@ class JackHandler(BaseHTTPRequestHandler):
         else:
             self.send_error(HTTPStatus.NOT_FOUND)
 
+    def do_OPTIONS(self) -> None:  # noqa: N802
+        """Allow the read-only browser bridge's JSON CORS preflight."""
+        endpoint = self.path.split("?", 1)[0]
+        if endpoint != "/api/browser-observation":
+            self.send_error(HTTPStatus.NOT_FOUND)
+            return
+        self.send_response(HTTPStatus.NO_CONTENT)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Access-Control-Max-Age", "300")
+        self.end_headers()
+
     def do_POST(self) -> None:  # noqa: N802
         endpoint = self.path.split("?", 1)[0]
         if endpoint not in {"/api/symbol-request", "/api/market-snapshot", "/api/browser-observation"}:
