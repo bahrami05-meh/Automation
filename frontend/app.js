@@ -38,6 +38,7 @@ function renderReport(payload) {
   const technical = payload.technical ? `<h3>خروجی ایجنت تکنیکال</h3>
     <p>وضعیت: <strong>${escapeHtml(payload.technical.status)}</strong> · سیگنال فنی: ${escapeHtml(payload.technical.overall_signal)}</p>
     <p>${escapeHtml(payload.technical.summary || payload.technical.reason || '')}</p>
+    ${payload.technical.trend ? `<p>روند: ${escapeHtml(payload.technical.trend.direction)} · مومنتوم: ${escapeHtml(payload.technical.momentum?.direction || 'NONE')} · RSI14: ${escapeHtml(payload.technical.momentum?.rsi14 ?? 'ندارد')}</p>` : ''}
     ${payload.technical.levels?.length ? `<p>سطوح مهم: ${payload.technical.levels.map((level) => `${escapeHtml(level.name)}=${escapeHtml(level.value)}`).join(' · ')}</p>` : ''}
     ${payload.technical.clear_signal ? `<p>سیگنال شفاف: ${escapeHtml(payload.technical.clear_signal.direction)} · محرک: ${escapeHtml(payload.technical.clear_signal.trigger || 'ندارد')} · ابطال: ${escapeHtml(payload.technical.clear_signal.invalidation || 'ندارد')}</p>` : ''}` : '';
   const chart = payload.chart_control ? `<h3>خروجی ایجنت کنترل نمودار</h3>

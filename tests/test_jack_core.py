@@ -96,6 +96,8 @@ class QualitySupervisorTests(unittest.TestCase):
         self.assertEqual(result["technical"]["overall_signal"], "ALIGNED_BULLISH")
         self.assertEqual(result["technical"]["clear_signal"]["direction"], "BULLISH_CONFIRMATION")
         self.assertEqual(len(result["technical"]["levels"]), 3)
+        self.assertEqual(result["technical"]["trend"]["direction"], "BULLISH")
+        self.assertEqual(result["technical"]["momentum"]["direction"], "BULLISH")
         self.assertEqual(result["symbols"][0]["jack_decision"], "WATCHLIST")
 
     def test_technical_agent_skips_blocked_data(self):

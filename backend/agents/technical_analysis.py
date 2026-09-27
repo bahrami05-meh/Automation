@@ -25,6 +25,8 @@ class TechnicalAnalysisAgent:
         if symbol.get("data_status") != "VALID" or symbol.get("quality", {}).get("status") != "QA_PASSED":
             report["technical"] = {"status": "SKIPPED", "reason": "دادهٔ معتبر و تأییدشدهٔ ناظر کیفیت برای تحلیل تکنیکال موجود نیست.",
                 "overall_signal": "NOT_AVAILABLE", "evidence": [], "levels": [],
+                "trend": {"status": "NOT_AVAILABLE", "direction": "NONE", "evidence": []},
+                "momentum": {"status": "NOT_AVAILABLE", "direction": "NONE", "rsi14": None, "evidence": []},
                 "clear_signal": {"status": "NOT_AVAILABLE", "direction": "NONE", "trigger": None, "invalidation": None}}
             report["technical_agent"] = agent | {"status": "SKIPPED"}
             return self._with_agent_chain(report)
@@ -48,7 +50,15 @@ class TechnicalAnalysisAgent:
         support, resistance = min(window), max(window)
         sma = next((float(item["parameters"]["value"]) for item in indicators if item.get("name") == "SMA"), None)
         rsi = next((float(item["parameters"]["value"]) for item in indicators if item.get("name") == "RSI"), None)
+        trend_items = [item for item in evidence if item["family"] == "trend"]
+        momentum_items = [item for item in evidence if item["family"] == "momentum"]
+        trend_directions = {item["direction"] for item in trend_items}
+        momentum_directions = {item["direction"] for item in momentum_items}
+        trend_direction = "BULLISH" if trend_directions == {"bullish"} else "BEARISH" if trend_directions == {"bearish"} else "MIXED_OR_NEUTRAL"
+        momentum_direction = "BULLISH" if momentum_directions == {"bullish"} else "BEARISH" if momentum_directions == {"bearish"} else "MIXED_OR_NEUTRAL"
         report["technical"] = {"status": "ANALYZED", "overall_signal": overall, "summary": summary, "evidence": evidence,
+            "trend": {"status": "OBSERVED", "direction": trend_direction, "evidence": trend_items, "sma20": sma},
+            "momentum": {"status": "OBSERVED", "direction": momentum_direction, "evidence": momentum_items, "rsi14": rsi},
             "levels": [{"name": "SUPPORT", "value": round(support, 4), "basis": "minimum close of recent window"},
                        {"name": "RESISTANCE", "value": round(resistance, 4), "basis": "maximum close of recent window"},
                        *([{"name": "SMA20", "value": round(sma, 4), "basis": "calculated indicator"}] if sma is not None else [])],
