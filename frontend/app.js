@@ -37,7 +37,9 @@ function renderReport(payload) {
   const agentHtml = agents.map((agent) => `<p>ایجنت: <strong>${escapeHtml(agent.name)}</strong> · وضعیت: ${escapeHtml(agent.status)} · شناسه اجرا: ${escapeHtml(agent.run_id)}</p>`).join('');
   const technical = payload.technical ? `<h3>خروجی ایجنت تکنیکال</h3>
     <p>وضعیت: <strong>${escapeHtml(payload.technical.status)}</strong> · سیگنال فنی: ${escapeHtml(payload.technical.overall_signal)}</p>
-    <p>${escapeHtml(payload.technical.summary || payload.technical.reason || '')}</p>` : '';
+    <p>${escapeHtml(payload.technical.summary || payload.technical.reason || '')}</p>
+    ${payload.technical.levels?.length ? `<p>سطوح مهم: ${payload.technical.levels.map((level) => `${escapeHtml(level.name)}=${escapeHtml(level.value)}`).join(' · ')}</p>` : ''}
+    ${payload.technical.clear_signal ? `<p>سیگنال شفاف: ${escapeHtml(payload.technical.clear_signal.direction)} · محرک: ${escapeHtml(payload.technical.clear_signal.trigger || 'ندارد')} · ابطال: ${escapeHtml(payload.technical.clear_signal.invalidation || 'ندارد')}</p>` : ''}` : '';
   const chart = payload.chart_control ? `<h3>خروجی ایجنت کنترل نمودار</h3>
     <p>وضعیت: <strong>${escapeHtml(payload.chart_control.status)}</strong></p>
     <p>${escapeHtml(payload.chart_control.reason || '')}</p>` : '';

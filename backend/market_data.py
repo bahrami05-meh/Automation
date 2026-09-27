@@ -108,7 +108,7 @@ def build_market_report(snapshot: object, allowed_hosts: set[str] | None = None)
         "symbols": [{
             "symbol": data["symbol"],
             "data_status": "VALID" if qa["status"] == "QA_PASSED" else "DATA_BLOCKED",
-            "market_metadata": {key: data[key] for key in ("source", "collected_at", "timezone", "price_unit", "price_type", "timeframe")},
+            "market_metadata": {key: data[key] for key in ("source", "collected_at", "timezone", "price_unit", "price_type", "timeframe")} | {"recent_closes": [round(value, 4) for value in closes[-20:]]},
             "last_close": last_close,
             "indicators": indicators,
             "quality": qa,
