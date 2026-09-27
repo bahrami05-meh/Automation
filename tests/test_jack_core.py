@@ -156,10 +156,14 @@ class QualitySupervisorTests(unittest.TestCase):
             "timezone": "Asia/Tehran", "price_unit": "IRR", "market_status": "open", "last_price": 120,
             "volume": 1500, "average_volume_20": 1000, "individual_buy_volume": 800, "individual_sell_volume": 500,
             "legal_buy_volume": 200, "legal_sell_volume": 400, "buy_queue_value": 300000, "sell_queue_value": 100000,
+            "individual_buy_count": 10, "individual_sell_count": 20, "legal_buy_count": 4, "legal_sell_count": 8,
+            "trade_count": 100, "turnover_value": 5000000, "market_value": 90000000, "best_bid_price": 119, "best_ask_price": 121,
         })
         self.assertEqual(result["market_board_agent"]["status"], "OBSERVED")
         self.assertEqual(result["market_board"]["metrics"]["volume_state"], "ABOVE_AVERAGE")
         self.assertEqual(result["market_board"]["metrics"]["queue_state"], "BUY_QUEUE_DOMINANT")
+        self.assertEqual(result["market_board"]["metrics"]["individual_buy_power"], 80.0)
+        self.assertEqual(result["market_board"]["metrics"]["legal_sell_power"], 50.0)
 
     def test_market_board_agent_blocks_suspended_symbol(self):
         rows = [{"open": close - 1, "high": close + 1, "low": close - 2, "close": close, "volume": 1000} for close in range(100, 121)]

@@ -50,7 +50,7 @@ function renderReport(payload) {
   const board = payload.market_board ? `<h3>خروجی ایجنت تابلو</h3>
     <p>وضعیت: <strong>${escapeHtml(payload.market_board.status)}</strong></p>
     <p>${escapeHtml(payload.market_board.reason || '')}</p>
-    ${payload.market_board.metrics ? `<p>نسبت حجم به میانگین ۲۰روزه: ${escapeHtml(payload.market_board.metrics.volume_ratio_to_average_20)} · وضعیت صف: ${escapeHtml(payload.market_board.metrics.queue_state)}</p>` : ''}` : '';
+    ${payload.market_board.metrics ? `<p>نسبت حجم به میانگین ۲۰روزه: ${escapeHtml(payload.market_board.metrics.volume_ratio_to_average_20)} · وضعیت صف: ${escapeHtml(payload.market_board.metrics.queue_state)}</p><p>قدرت خرید/فروش حقیقی: ${escapeHtml(payload.market_board.metrics.individual_buy_power ?? 'ندارد')} / ${escapeHtml(payload.market_board.metrics.individual_sell_power ?? 'ندارد')} · قدرت خرید/فروش حقوقی: ${escapeHtml(payload.market_board.metrics.legal_buy_power ?? 'ندارد')} / ${escapeHtml(payload.market_board.metrics.legal_sell_power ?? 'ندارد')}</p><p>تعداد معاملات: ${escapeHtml(payload.market_board.metrics.trade_count ?? 'ندارد')} · ارزش معاملات: ${escapeHtml(payload.market_board.metrics.turnover_value ?? 'ندارد')} · بهترین خرید/فروش: ${escapeHtml(payload.market_board.metrics.best_bid_price ?? 'ندارد')} / ${escapeHtml(payload.market_board.metrics.best_ask_price ?? 'ندارد')}</p>` : ''}` : '';
   const fundamental = payload.fundamental ? `<h3>خروجی ایجنت بنیادی</h3>
     <p>وضعیت: <strong>${escapeHtml(payload.fundamental.status)}</strong></p>
     <p>${escapeHtml(payload.fundamental.reason || '')}</p>

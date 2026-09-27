@@ -14,7 +14,7 @@ from uuid import uuid4
 
 AGENT_NAME = "ایجنت تابلو"
 AGENT_ID = "market-board-agent"
-AGENT_VERSION = "0.1"
+AGENT_VERSION = "0.2"
 TEHRAN = timezone(timedelta(hours=3, minutes=30), "Asia/Tehran")
 MARKET_STATUSES = {"open", "closed", "suspended"}
 
@@ -70,6 +70,7 @@ class MarketBoardAgent:
         individual_net = round(board["individual_buy_volume"] - board["individual_sell_volume"], 4)
         legal_net = round(board["legal_buy_volume"] - board["legal_sell_volume"], 4)
         queue_state = self._queue_state(board["buy_queue_value"], board["sell_queue_value"])
+        powers = self._powers(board)
         status = "MARKET_CLOSED" if board["market_status"] == "closed" else "OBSERVED"
         reason = "بازار در مشاهدهٔ ثبت‌شده بسته است؛ اعداد برای گزارش نگهداری شد اما داده زنده تلقی نمی‌شود." if status == "MARKET_CLOSED" else "تابلو اعتبارسنجی شد؛ خروجی فقط مشاهده و محاسبه است، نه پیشنهاد معامله."
         report["market_board"] = {
@@ -82,6 +83,15 @@ class MarketBoardAgent:
                 "individual_net_volume": individual_net,
                 "legal_net_volume": legal_net,
                 "queue_state": queue_state,
+                "individual_buy_power": powers["individual_buy_power"],
+                "individual_sell_power": powers["individual_sell_power"],
+                "legal_buy_power": powers["legal_buy_power"],
+                "legal_sell_power": powers["legal_sell_power"],
+                "trade_count": board.get("trade_count"),
+                "turnover_value": board.get("turnover_value"),
+                "market_value": board.get("market_value"),
+                "best_bid_price": board.get("best_bid_price"),
+                "best_ask_price": board.get("best_ask_price"),
             },
             "findings": [],
         }
@@ -133,7 +143,30 @@ class MarketBoardAgent:
             if value < 0 or (key in {"last_price", "average_volume_20"} and value == 0):
                 raise ValueError(f"مقدار {key} در مشاهدهٔ تابلو نامعتبر است.")
             checked[key] = value
+        for key in ("individual_buy_count", "individual_sell_count", "legal_buy_count", "legal_sell_count", "trade_count", "turnover_value", "market_value", "best_bid_price", "best_ask_price"):
+            if key in observation:
+                try:
+                    value = float(observation[key])
+                except (TypeError, ValueError) as error:
+                    raise ValueError(f"مقدار {key} در مشاهدهٔ تابلو نامعتبر است.") from error
+                if value < 0:
+                    raise ValueError(f"مقدار {key} در مشاهدهٔ تابلو نامعتبر است.")
+                checked[key] = value
         return checked
+
+    @staticmethod
+    def _powers(board: dict[str, Any]) -> dict[str, float | None]:
+        def power(volume_key: str, count_key: str) -> float | None:
+            count = board.get(count_key)
+            if count is None or count <= 0:
+                return None
+            return round(board[volume_key] / count, 4)
+        return {
+            "individual_buy_power": power("individual_buy_volume", "individual_buy_count"),
+            "individual_sell_power": power("individual_sell_volume", "individual_sell_count"),
+            "legal_buy_power": power("legal_buy_volume", "legal_buy_count"),
+            "legal_sell_power": power("legal_sell_volume", "legal_sell_count"),
+        }
 
     @staticmethod
     def _queue_state(buy_queue_value: float, sell_queue_value: float) -> str:
