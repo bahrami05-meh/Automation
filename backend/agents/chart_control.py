@@ -8,10 +8,11 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from typing import Any
-from urllib.parse import urlparse
 from uuid import uuid4
 
 from backend.jack_core import VALID_DIRECTIONS
+from backend.freshness import validate_collected_at
+from backend.url_safety import safe_https_origin
 
 
 AGENT_NAME = "ایجنت کنترل نمودار"
@@ -115,17 +116,8 @@ class ChartControlAgent:
             raise ValueError("فیلدهای لازم مشاهدهٔ نمودار وجود ندارند: " + ", ".join(missing))
         if observation["symbol"] != symbol["symbol"]:
             raise ValueError("نماد مشاهدهٔ نمودار با نماد دادهٔ بازار یکسان نیست.")
-        if not isinstance(observation["source"], str) or not observation["source"].startswith("https://"):
-            raise ValueError("منبع نمودار باید نشانی HTTPS باشد.")
-        host = urlparse(observation["source"]).hostname
-        if not host or host.lower() not in self.allowed_hosts:
-            raise ValueError("میزبان نمودار در فهرست منابع تأییدشدهٔ محلی نیست.")
-        if not isinstance(observation["collected_at"], str):
-            raise ValueError("زمان مشاهدهٔ نمودار نامعتبر است.")
-        try:
-            datetime.fromisoformat(observation["collected_at"].replace("Z", "+00:00"))
-        except ValueError as error:
-            raise ValueError("زمان مشاهدهٔ نمودار نامعتبر است.") from error
+        source_origin = safe_https_origin(observation["source"], self.allowed_hosts)
+        collected_at = validate_collected_at(observation["collected_at"], "chart").isoformat()
         if observation["timezone"] != "Asia/Tehran":
             raise ValueError("منطقهٔ زمانی مشاهدهٔ نمودار باید Asia/Tehran باشد.")
         if observation["timeframe"] != symbol["market_metadata"]["timeframe"]:
@@ -147,8 +139,8 @@ class ChartControlAgent:
                 raise ValueError("پارامترهای اندیکاتور نمودار نامعتبر است.")
             checked.append({"name": name.upper(), "direction": direction, "parameters": item.get("parameters", {})})
         return {
-            "symbol": observation["symbol"], "source": observation["source"],
-            "collected_at": observation["collected_at"], "timezone": observation["timezone"],
+            "symbol": observation["symbol"], "source": source_origin,
+            "collected_at": collected_at, "timezone": observation["timezone"],
             "timeframe": observation["timeframe"], "indicators": checked,
         }
 
@@ -157,6 +149,8 @@ class ChartControlAgent:
         quality = symbol.setdefault("quality", {"status": "QA_BLOCKED", "findings": []})
         quality["status"] = "QA_BLOCKED"
         quality.setdefault("findings", []).append(finding)
+        symbol["data_status"] = symbol["jack_decision"] = "DATA_BLOCKED"
+        symbol["reason"] = finding["message"]
 
     @staticmethod
     def _with_agent_chain(report: dict[str, Any]) -> dict[str, Any]:

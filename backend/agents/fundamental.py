@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from typing import Any
-from urllib.parse import urlparse
+from backend.numeric import finite_number
+from backend.freshness import validate_collected_at
+from backend.url_safety import safe_https_origin
 from uuid import uuid4
 
 
@@ -49,6 +51,7 @@ class FundamentalAgent:
             return self._with_agent_chain(report)
         try:
             fundamental = self._validate(symbol, observation)
+            net_margin = round(finite_number(fundamental["net_profit"] / fundamental["revenue"] * 100), 2)
         except ValueError as error:
             finding = {"code": "FUNDAMENTAL_OBSERVATION_INVALID", "severity": "blocker", "message": str(error)}
             report["fundamental"] = {"status": "FUNDAMENTAL_BLOCKED", "reason": str(error), "findings": [finding]}
@@ -56,7 +59,6 @@ class FundamentalAgent:
             report["fundamental_agent"] = agent | {"status": "FUNDAMENTAL_BLOCKED"}
             return self._with_agent_chain(report)
 
-        net_margin = round(fundamental["net_profit"] / fundamental["revenue"] * 100, 2)
         earnings_state = "PROFITABLE" if fundamental["net_profit"] > 0 else "LOSS_MAKING"
         leverage_state = "HIGH_LEVERAGE" if fundamental["debt_to_equity"] > 2 else "MODERATE_OR_LOW_LEVERAGE"
         report["fundamental"] = {
@@ -92,18 +94,8 @@ class FundamentalAgent:
         if observation["symbol"] != symbol["symbol"]:
             raise ValueError("نماد مشاهدهٔ بنیادی با نماد دادهٔ بازار یکسان نیست.")
         source = observation["source"]
-        if not isinstance(source, str) or not source.startswith("https://"):
-            raise ValueError("منبع بنیادی باید نشانی HTTPS باشد.")
-        host = urlparse(source).hostname
-        if not host or host.lower() not in self.allowed_hosts:
-            raise ValueError("میزبان بنیادی در فهرست منابع رسمیِ تأییدشدهٔ محلی نیست.")
-        collected_at = observation["collected_at"]
-        if not isinstance(collected_at, str):
-            raise ValueError("زمان مشاهدهٔ بنیادی نامعتبر است.")
-        try:
-            datetime.fromisoformat(collected_at.replace("Z", "+00:00"))
-        except ValueError as error:
-            raise ValueError("زمان مشاهدهٔ بنیادی نامعتبر است.") from error
+        source_origin = safe_https_origin(source, self.allowed_hosts)
+        collected_at = validate_collected_at(observation["collected_at"], "fundamental").isoformat()
         if observation["timezone"] != "Asia/Tehran":
             raise ValueError("منطقهٔ زمانی مشاهدهٔ بنیادی باید Asia/Tehran باشد.")
         if observation["financial_unit"] not in {"IRR", "IRT"}:
@@ -113,13 +105,17 @@ class FundamentalAgent:
         checked: dict[str, Any] = {
             key: observation[key] for key in ("symbol", "source", "collected_at", "timezone", "fiscal_year_end", "financial_unit")
         }
+        checked["source"] = source_origin
+        checked["collected_at"] = collected_at
         for key in ("revenue", "net_profit", "operating_margin_percent", "price_to_earnings", "debt_to_equity"):
             try:
-                value = float(observation[key])
+                value = finite_number(observation[key])
             except (TypeError, ValueError) as error:
                 raise ValueError(f"مقدار {key} در مشاهدهٔ بنیادی نامعتبر است.") from error
             if key in {"revenue", "price_to_earnings", "debt_to_equity"} and value < 0:
                 raise ValueError(f"مقدار {key} در مشاهدهٔ بنیادی نامعتبر است.")
+            if key == "revenue" and value == 0:
+                raise ValueError("FUNDAMENTAL_REVENUE_MUST_BE_POSITIVE")
             checked[key] = value
         events = observation["events"]
         if not isinstance(events, list):

@@ -2,6 +2,7 @@
 from __future__ import annotations
 from math import floor
 from typing import Any
+from backend.numeric import finite_number
 from uuid import uuid4
 
 class PortfolioRiskAgent:
@@ -18,7 +19,7 @@ class PortfolioRiskAgent:
             required = ("symbol", "price_unit", "account_equity", "available_cash", "risk_percent", "entry_price", "stop_loss", "fee_per_unit", "slippage_per_unit", "liquidity_cap_quantity")
             if not isinstance(observation, dict) or any(key not in observation for key in required): raise ValueError("فیلدهای لازم ریسک کامل نیستند.")
             if observation["symbol"] != symbol["symbol"] or observation["price_unit"] != symbol["market_metadata"]["price_unit"]: raise ValueError("نماد یا واحد ریسک با دادهٔ بازار یکسان نیست.")
-            values = {key: float(observation[key]) for key in required[2:]}
+            values = {key: finite_number(observation[key]) for key in required[2:]}
             if any(value < 0 for value in values.values()) or not 0 < values["risk_percent"] <= 100 or values["entry_price"] <= 0 or values["stop_loss"] <= 0 or values["entry_price"] == values["stop_loss"]: raise ValueError("مقادیر ریسک نامعتبرند.")
         except (TypeError, ValueError) as error:
             finding = {"code": "RISK_OBSERVATION_INVALID", "severity": "blocker", "message": str(error)}

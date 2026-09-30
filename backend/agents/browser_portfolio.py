@@ -9,7 +9,9 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from typing import Any
-from urllib.parse import urlparse
+from backend.numeric import finite_number
+from backend.freshness import validate_collected_at
+from backend.url_safety import safe_https_origin
 from uuid import uuid4
 
 from backend.jack_core import build_symbol_request
@@ -57,6 +59,11 @@ class BrowserPortfolioAgent:
                 "holdings_count": 0,
             }
             report["browser_portfolio_agent"] = agent | {"status": "PORTFOLIO_BLOCKED", "error_code": "PORTFOLIO_OBSERVATION_INVALID"}
+            for symbol in report.get("symbols", []):
+                symbol["data_status"] = symbol["jack_decision"] = "DATA_BLOCKED"
+                quality = symbol.setdefault("quality", {"findings": []})
+                quality["status"] = "QA_BLOCKED"
+                quality.setdefault("findings", []).append({"code": "PORTFOLIO_OBSERVATION_INVALID", "severity": "blocker", "message": str(error)})
             return self._with_agent_chain(report)
 
         report["portfolio_capture"] = {
@@ -81,17 +88,8 @@ class BrowserPortfolioAgent:
         missing = [key for key in required if key not in observation]
         if missing:
             raise ValueError("فیلدهای لازم مشاهدهٔ پرتفوی وجود ندارند: " + ", ".join(missing))
-        if not isinstance(observation["source"], str) or not observation["source"].startswith("https://"):
-            raise ValueError("منبع پرتفوی باید نشانی HTTPS باشد.")
-        host = urlparse(observation["source"]).hostname
-        if not host or host.lower() not in self.approved_hosts:
-            raise ValueError("میزبان پرتفوی در فهرست `brokerage.approved_hosts` تنظیمات محلی تأیید نشده است.")
-        if not isinstance(observation["collected_at"], str):
-            raise ValueError("زمان مشاهدهٔ پرتفوی نامعتبر است.")
-        try:
-            datetime.fromisoformat(observation["collected_at"].replace("Z", "+00:00"))
-        except ValueError as error:
-            raise ValueError("زمان مشاهدهٔ پرتفوی نامعتبر است.") from error
+        source_origin = safe_https_origin(observation["source"], self.approved_hosts)
+        collected_at = validate_collected_at(observation["collected_at"], "portfolio").isoformat()
         if observation["timezone"] != "Asia/Tehran":
             raise ValueError("منطقهٔ زمانی مشاهدهٔ پرتفوی باید Asia/Tehran باشد.")
         if observation["price_unit"] not in {"IRR", "IRT"}:
@@ -105,10 +103,10 @@ class BrowserPortfolioAgent:
                 raise ValueError(f"ردیف {index + 1} پرتفوی نامعتبر است.")
             try:
                 symbol = build_symbol_request(str(item["symbol"]))["symbols"][0]["symbol"]
-                quantity = float(item["quantity"])
-                average_price = float(item["average_price"])
-                last_price = float(item["last_price"])
-                market_value = float(item["market_value"])
+                quantity = finite_number(item["quantity"])
+                average_price = finite_number(item["average_price"])
+                last_price = finite_number(item["last_price"])
+                market_value = finite_number(item["market_value"])
             except (KeyError, TypeError, ValueError) as error:
                 raise ValueError(f"ردیف {index + 1} پرتفوی ناقص یا نامعتبر است.") from error
             if min(quantity, average_price, last_price, market_value) < 0:
@@ -118,7 +116,7 @@ class BrowserPortfolioAgent:
                 "last_price": last_price, "market_value": market_value,
             })
         return {
-            "source": observation["source"], "collected_at": observation["collected_at"],
+            "source": source_origin, "collected_at": collected_at,
             "timezone": observation["timezone"], "price_unit": observation["price_unit"], "holdings": checked,
         }
 

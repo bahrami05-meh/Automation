@@ -8,18 +8,20 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from typing import Any
-from urllib.parse import urlparse
+from backend.numeric import finite_number
+from backend.freshness import validate_collected_at
+from backend.browser_bridge import validate_market_snapshot
 
 from backend.jack_core import build_symbol_request, quality_supervisor
+from backend.url_safety import safe_https_origin
 
 
 REQUIRED_METADATA = ("symbol", "source", "collected_at", "timezone", "price_unit", "price_type", "timeframe", "ohlcv")
+MAX_MARKET_AGE = timedelta(days=7)
 
 
-def _parse_time(value: object) -> None:
-    if not isinstance(value, str):
-        raise ValueError("زمان دریافت داده نامعتبر است.")
-    datetime.fromisoformat(value.replace("Z", "+00:00"))
+def _parse_time(value: object, *, now: datetime | None = None, max_age: timedelta = MAX_MARKET_AGE) -> datetime:
+    return validate_collected_at(value, "market", now=now, max_age=max_age)
 
 
 def _closes(snapshot: dict[str, Any]) -> list[float]:
@@ -31,35 +33,27 @@ def _closes(snapshot: dict[str, Any]) -> list[float]:
         if not isinstance(row, dict):
             raise ValueError(f"ردیف {index + 1} OHLCV نامعتبر است.")
         try:
-            open_price = float(row["open"])
-            high = float(row["high"])
-            low = float(row["low"])
-            close = float(row["close"])
-            volume = float(row["volume"])
+            open_price = finite_number(row["open"])
+            high = finite_number(row["high"])
+            low = finite_number(row["low"])
+            close = finite_number(row["close"])
+            volume = finite_number(row["volume"])
         except (KeyError, TypeError, ValueError) as error:
             raise ValueError(f"ردیف {index + 1} OHLCV ناقص است.") from error
-        if min(open_price, high, low, close, volume) < 0 or high < max(open_price, close) or low > min(open_price, close):
+        if min(open_price, high, low, close) <= 0 or volume < 0 or high < max(open_price, close) or low > min(open_price, close):
             raise ValueError(f"ردیف {index + 1} OHLCV ناسازگار است.")
         closes.append(close)
     return closes
 
 
-def validate_snapshot(snapshot: object, allowed_hosts: set[str] | None = None) -> dict[str, Any]:
-    if not isinstance(snapshot, dict):
-        raise ValueError("بستهٔ داده باید یک شیء JSON باشد.")
-    missing = [key for key in REQUIRED_METADATA if key not in snapshot]
-    if missing:
-        raise ValueError("فیلدهای لازم وجود ندارند: " + ", ".join(missing))
+def validate_snapshot(snapshot: object, allowed_hosts: set[str] | None = None, *, enforce_freshness: bool = True, now: datetime | None = None) -> dict[str, Any]:
+    snapshot = validate_market_snapshot(snapshot, allowed_hosts)
     symbol_report = build_symbol_request(str(snapshot["symbol"]))
     symbol = symbol_report["symbols"][0]["symbol"]
-    if not isinstance(snapshot["source"], str) or not snapshot["source"].startswith("https://"):
-        raise ValueError("منبع باید یک نشانی HTTPS باشد.")
-    source_host = urlparse(snapshot["source"]).hostname
-    if not source_host:
-        raise ValueError("میزبان منبع نامعتبر است.")
-    if allowed_hosts is not None and source_host.lower() not in allowed_hosts:
-        raise ValueError("میزبان منبع در فهرست منابع تأییدشدهٔ محلی نیست.")
-    _parse_time(snapshot["collected_at"])
+    source_origin = safe_https_origin(snapshot["source"], allowed_hosts)
+    if not enforce_freshness:
+        raise ValueError("FRESHNESS_CHECK_REQUIRED")
+    collected_at = _parse_time(snapshot["collected_at"], now=now).isoformat()
     if snapshot["timezone"] != "Asia/Tehran":
         raise ValueError("منطقهٔ زمانی باید Asia/Tehran باشد.")
     if snapshot["price_unit"] not in {"IRR", "IRT"}:
@@ -68,7 +62,7 @@ def validate_snapshot(snapshot: object, allowed_hosts: set[str] | None = None) -
         raise ValueError("نوع قیمت باید raw یا adjusted باشد.")
     if not isinstance(snapshot["timeframe"], str) or not snapshot["timeframe"]:
         raise ValueError("تایم‌فریم نامعتبر است.")
-    return {**snapshot, "symbol": symbol, "closes": _closes(snapshot)}
+    return {**snapshot, "symbol": symbol, "source": source_origin, "collected_at": collected_at, "closes": _closes(snapshot)}
 
 
 def _rsi(closes: list[float], period: int = 14) -> float:
@@ -84,13 +78,13 @@ def _rsi(closes: list[float], period: int = 14) -> float:
     return 100 - (100 / (1 + relative_strength))
 
 
-def build_market_report(snapshot: object, allowed_hosts: set[str] | None = None) -> dict[str, Any]:
+def build_market_report(snapshot: object, allowed_hosts: set[str] | None = None, *, enforce_freshness: bool = True, now: datetime | None = None) -> dict[str, Any]:
     """تحلیل آموزشیِ دادهٔ واردشده؛ خروجی هرگز توصیهٔ خرید یا فروش نیست."""
-    data = validate_snapshot(snapshot, allowed_hosts)
+    data = validate_snapshot(snapshot, allowed_hosts, enforce_freshness=enforce_freshness, now=now)
     closes = data.pop("closes")
     last_close = closes[-1]
-    sma20 = sum(closes[-20:]) / 20
-    rsi14 = _rsi(closes)
+    sma20 = finite_number(sum(value / 20 for value in closes[-20:]))
+    rsi14 = finite_number(_rsi(closes))
     trend_direction = "bullish" if last_close > sma20 else "bearish" if last_close < sma20 else "neutral"
     momentum_direction = "bullish" if rsi14 > 55 else "bearish" if rsi14 < 45 else "neutral"
     indicators = [

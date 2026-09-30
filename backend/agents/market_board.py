@@ -8,7 +8,9 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from typing import Any
-from urllib.parse import urlparse
+from backend.numeric import finite_number
+from backend.freshness import validate_collected_at
+from backend.url_safety import safe_https_origin
 from uuid import uuid4
 
 
@@ -115,17 +117,8 @@ class MarketBoardAgent:
             raise ValueError("فیلدهای لازم مشاهدهٔ تابلو وجود ندارند: " + ", ".join(missing))
         if observation["symbol"] != symbol["symbol"]:
             raise ValueError("نماد مشاهدهٔ تابلو با نماد دادهٔ بازار یکسان نیست.")
-        if not isinstance(observation["source"], str) or not observation["source"].startswith("https://"):
-            raise ValueError("منبع تابلو باید نشانی HTTPS باشد.")
-        host = urlparse(observation["source"]).hostname
-        if not host or host.lower() not in self.allowed_hosts:
-            raise ValueError("میزبان تابلو در فهرست منابع تأییدشدهٔ محلی نیست.")
-        if not isinstance(observation["collected_at"], str):
-            raise ValueError("زمان مشاهدهٔ تابلو نامعتبر است.")
-        try:
-            datetime.fromisoformat(observation["collected_at"].replace("Z", "+00:00"))
-        except ValueError as error:
-            raise ValueError("زمان مشاهدهٔ تابلو نامعتبر است.") from error
+        source_origin = safe_https_origin(observation["source"], self.allowed_hosts)
+        collected_at = validate_collected_at(observation["collected_at"], "board").isoformat()
         if observation["timezone"] != "Asia/Tehran":
             raise ValueError("منطقهٔ زمانی مشاهدهٔ تابلو باید Asia/Tehran باشد.")
         if observation["price_unit"] != symbol["market_metadata"]["price_unit"]:
@@ -133,11 +126,13 @@ class MarketBoardAgent:
         if observation["market_status"] not in MARKET_STATUSES:
             raise ValueError("وضعیت بازار تابلو باید open، closed یا suspended باشد.")
         checked: dict[str, Any] = {
-            key: observation[key] for key in ("symbol", "source", "collected_at", "timezone", "price_unit", "market_status")
+            key: observation[key] for key in ("symbol", "collected_at", "timezone", "price_unit", "market_status")
         }
+        checked["source"] = source_origin
+        checked["collected_at"] = collected_at
         for key in required[6:]:
             try:
-                value = float(observation[key])
+                value = finite_number(observation[key])
             except (TypeError, ValueError) as error:
                 raise ValueError(f"مقدار {key} در مشاهدهٔ تابلو نامعتبر است.") from error
             if value < 0 or (key in {"last_price", "average_volume_20"} and value == 0):
@@ -146,7 +141,7 @@ class MarketBoardAgent:
         for key in ("individual_buy_count", "individual_sell_count", "legal_buy_count", "legal_sell_count", "trade_count", "turnover_value", "market_value", "best_bid_price", "best_ask_price"):
             if key in observation:
                 try:
-                    value = float(observation[key])
+                    value = finite_number(observation[key])
                 except (TypeError, ValueError) as error:
                     raise ValueError(f"مقدار {key} در مشاهدهٔ تابلو نامعتبر است.") from error
                 if value < 0:

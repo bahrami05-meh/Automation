@@ -5,6 +5,9 @@ from __future__ import annotations
 import argparse
 import json
 import mimetypes
+import secrets
+import threading
+import time
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -22,10 +25,13 @@ from backend.agents.market_board import MarketBoardAgent  # noqa: E402
 from backend.agents.fundamental import FundamentalAgent  # noqa: E402
 from backend.agents.portfolio_risk import PortfolioRiskAgent  # noqa: E402
 from backend.agents.quality_supervisor import QualitySupervisorAgent  # noqa: E402
-from backend.browser_bridge import validate_browser_payload  # noqa: E402
+from backend.browser_bridge import validate_browser_payload, validate_market_api_payload, validate_symbol_request_payload  # noqa: E402
 from backend.jack_core import build_demo_report  # noqa: E402
+from backend.numeric import validate_finite_tree  # noqa: E402
 
 FRONTEND = ROOT / "frontend"
+NONCE_TTL_SECONDS = 60
+MAX_BROWSER_NONCES = 256
 
 
 def load_allowed_hosts(section: str) -> set[str]:
@@ -54,13 +60,19 @@ class JackHandler(BaseHTTPRequestHandler):
     server_version = "JackLocal/0.1"
 
     def _send_json(self, payload: dict, status: int = HTTPStatus.OK) -> None:
-        body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        try:
+            body = json.dumps(payload, ensure_ascii=False, allow_nan=False).encode("utf-8")
+        except (ValueError, OverflowError):
+            status = HTTPStatus.BAD_REQUEST
+            body = b'{"error":"NONFINITE_OUTPUT_BLOCKED","data_status":"DATA_BLOCKED"}'
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
-        if self.path.split("?", 1)[0] == "/api/browser-observation":
-            self.send_header("Access-Control-Allow-Origin", "*")
+        origin = getattr(self, "_cors_origin", None)
+        if origin:
+            self.send_header("Access-Control-Allow-Origin", origin)
+            self.send_header("Vary", "Origin")
         self.end_headers()
         self.wfile.write(body)
 
@@ -79,6 +91,7 @@ class JackHandler(BaseHTTPRequestHandler):
         self.wfile.write(content)
 
     def do_GET(self) -> None:  # noqa: N802
+        self._cors_origin = None
         path = self.path.split("?", 1)[0]
         if path == "/api/health":
             self._send_json({"status": "ok", "mode": "local-only"})
@@ -95,6 +108,17 @@ class JackHandler(BaseHTTPRequestHandler):
                 {"name": "ایجنت ریسک پرتفوی", "id": "portfolio-risk-agent", "version": "0.1", "status": "available"},
                 {"name": "ایجنت ناظر کیفیت", "id": "quality-supervisor-agent", "version": "0.1", "status": "available"},
             ]})
+        elif path == "/api/browser-nonce":
+            origin = self._validated_cors_origin()
+            if self.headers.get("Origin") and origin is None:
+                self.send_error(HTTPStatus.FORBIDDEN, "Origin is not approved")
+                return
+            nonce = self.server.issue_browser_nonce(origin)
+            self._cors_origin = origin
+            if nonce is None:
+                self._send_json({"error": "BROWSER_NONCE_CAPACITY_REACHED"}, HTTPStatus.TOO_MANY_REQUESTS)
+                return
+            self._send_json({"nonce": nonce, "expires_in": NONCE_TTL_SECONDS})
         elif path in {"/", "/index.html"}:
             self._send_file("index.html")
         elif path in {"/app.js", "/styles.css"}:
@@ -104,29 +128,56 @@ class JackHandler(BaseHTTPRequestHandler):
 
     def do_OPTIONS(self) -> None:  # noqa: N802
         """Allow the read-only browser bridge's JSON CORS preflight."""
+        self._cors_origin = None
         endpoint = self.path.split("?", 1)[0]
         if endpoint != "/api/browser-observation":
             self.send_error(HTTPStatus.NOT_FOUND)
             return
+        origin = self._validated_cors_origin()
+        if origin is None:
+            self.send_error(HTTPStatus.FORBIDDEN, "Origin is not approved")
+            return
         self.send_response(HTTPStatus.NO_CONTENT)
-        self.send_header("Access-Control-Allow-Origin", "*")
+        self._cors_origin = origin
+        self.send_header("Access-Control-Allow-Origin", origin)
+        self.send_header("Vary", "Origin")
         self.send_header("Access-Control-Allow-Methods", "POST, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
         self.send_header("Access-Control-Max-Age", "300")
         self.end_headers()
 
     def do_POST(self) -> None:  # noqa: N802
+        self._cors_origin = None
         endpoint = self.path.split("?", 1)[0]
         if endpoint not in {"/api/symbol-request", "/api/market-snapshot", "/api/browser-observation"}:
             self.send_error(HTTPStatus.NOT_FOUND)
             return
+        if endpoint == "/api/browser-observation":
+            origin = self._validated_cors_origin()
+            if self.headers.get("Origin") and origin is None:
+                self.send_error(HTTPStatus.FORBIDDEN, "Origin is not approved")
+                return
+            self._cors_origin = origin
         try:
             length = int(self.headers.get("Content-Length", "0"))
             if not 1 <= length <= 262_144:
                 raise ValueError("اندازهٔ درخواست نامعتبر است.")
             payload = json.loads(self.rfile.read(length).decode("utf-8"))
+            validate_finite_tree(payload)
+            fundamental_hosts = getattr(self.server, "allowed_fundamental_hosts", {"codal.ir", "www.codal.ir"})
+            brokerage_hosts = getattr(self.server, "allowed_brokerage_hosts", set())
             if endpoint == "/api/browser-observation":
-                browser_payload = validate_browser_payload(payload)
+                browser_payload = validate_browser_payload(
+                    payload,
+                    market_hosts=self.server.allowed_source_hosts,
+                    chart_hosts=self.server.allowed_source_hosts,
+                    board_hosts=self.server.allowed_source_hosts,
+                    fundamental_hosts=fundamental_hosts,
+                    portfolio_hosts=brokerage_hosts,
+                )
+                if not self.server.consume_browser_nonce(browser_payload["bridge_nonce"], self._cors_origin):
+                    raise ValueError("BROWSER_NONCE_INVALID_OR_EXPIRED")
+                browser_payload = {key: value for key, value in browser_payload.items() if key != "bridge_nonce"}
                 symbol = browser_payload["symbol"]
                 report = self.server.market_capture_agent.capture_snapshot(symbol, browser_payload["market_snapshot"])
                 report = self.server.technical_analysis_agent.analyze(report)
@@ -134,35 +185,96 @@ class JackHandler(BaseHTTPRequestHandler):
                 report = self.server.market_board_agent.inspect(report, browser_payload.get("market_board_observation"))
                 report = self.server.fundamental_agent.inspect(report, browser_payload.get("fundamental_observation"))
                 report = self.server.portfolio_risk_agent.inspect(report, browser_payload.get("risk_observation"))
-                report = self.server.quality_supervisor_agent.inspect(report)
-                self._send_json(self.server.browser_portfolio_agent.capture(report, browser_payload.get("portfolio_observation")))
+                report = self.server.browser_portfolio_agent.capture(report, browser_payload.get("portfolio_observation"))
+                self._send_json(self.server.quality_supervisor_agent.inspect(report))
             elif endpoint == "/api/symbol-request":
-                if not isinstance(payload, dict) or not isinstance(payload.get("symbol"), str):
-                    raise ValueError("نام نماد ارسال نشده است.")
+                payload = validate_symbol_request_payload(payload)
                 report = self.server.market_capture_agent.request_symbol(payload["symbol"])
                 report = self.server.technical_analysis_agent.analyze(report)
                 report = self.server.chart_control_agent.inspect(report, None)
                 report = self.server.market_board_agent.inspect(report, None)
                 report = self.server.fundamental_agent.inspect(report, None)
                 report = self.server.portfolio_risk_agent.inspect(report, None)
-                report = self.server.quality_supervisor_agent.inspect(report)
-                self._send_json(self.server.browser_portfolio_agent.capture(report, None))
+                report = self.server.browser_portfolio_agent.capture(report, None)
+                self._send_json(self.server.quality_supervisor_agent.inspect(report))
             else:
                 if not isinstance(payload, dict) or not isinstance(payload.get("symbol"), str):
                     raise ValueError("نماد در بستهٔ دادهٔ بازار ارسال نشده است.")
-                report = self.server.market_capture_agent.capture_snapshot(payload["symbol"], payload)
+                payload = validate_market_api_payload(
+                    payload,
+                    market_hosts=self.server.allowed_source_hosts,
+                    chart_hosts=self.server.allowed_source_hosts,
+                    board_hosts=self.server.allowed_source_hosts,
+                    fundamental_hosts=fundamental_hosts,
+                    portfolio_hosts=brokerage_hosts,
+                )
+                market_snapshot = {key: payload[key] for key in (
+                    "symbol", "source", "collected_at", "timezone", "price_unit",
+                    "price_type", "timeframe", "ohlcv",
+                )}
+                report = self.server.market_capture_agent.capture_snapshot(payload["symbol"], market_snapshot)
                 report = self.server.technical_analysis_agent.analyze(report)
                 report = self.server.chart_control_agent.inspect(report, payload.get("chart_observation"))
                 report = self.server.market_board_agent.inspect(report, payload.get("market_board_observation"))
                 report = self.server.fundamental_agent.inspect(report, payload.get("fundamental_observation"))
                 report = self.server.portfolio_risk_agent.inspect(report, payload.get("risk_observation"))
-                report = self.server.quality_supervisor_agent.inspect(report)
-                self._send_json(self.server.browser_portfolio_agent.capture(report, payload.get("portfolio_observation")))
-        except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as error:
-            self._send_json({"error": str(error)}, HTTPStatus.BAD_REQUEST)
+                report = self.server.browser_portfolio_agent.capture(report, payload.get("portfolio_observation"))
+                self._send_json(self.server.quality_supervisor_agent.inspect(report))
+        except (UnicodeDecodeError, json.JSONDecodeError, ValueError, ArithmeticError) as error:
+            self._send_json({"error": "ARITHMETIC_INPUT_INVALID" if isinstance(error, ArithmeticError) else str(error), "data_status": "DATA_BLOCKED"}, HTTPStatus.BAD_REQUEST)
+
+    def _validated_cors_origin(self) -> str | None:
+        origin = self.headers.get("Origin")
+        if not origin:
+            return None
+        if not origin.startswith("https://"):
+            return None
+        from urllib.parse import urlparse
+        approved = getattr(self.server, "allowed_source_hosts", set())
+        try:
+            parsed = urlparse(origin)
+            port = parsed.port
+        except ValueError:
+            return None
+        if parsed.path or parsed.params or parsed.query or parsed.fragment or parsed.username or parsed.password or port is not None:
+            return None
+        return origin if parsed.hostname and parsed.hostname.lower() in approved else None
 
     def log_message(self, format: str, *args: object) -> None:
         print(f"[jack-local] {self.address_string()} - {format % args}")
+
+
+def configure_browser_nonces(server: ThreadingHTTPServer) -> None:
+    server._browser_nonces = {}
+    server._browser_nonce_lock = threading.Lock()
+    server.issue_browser_nonce = lambda origin=None: _issue_browser_nonce(server, origin)
+    server.consume_browser_nonce = lambda nonce, origin=None: _consume_browser_nonce(server, nonce, origin)
+
+
+def _issue_browser_nonce(server: ThreadingHTTPServer, origin: str | None = None) -> str | None:
+    with server._browser_nonce_lock:
+        now = time.monotonic()
+        server._browser_nonces = {key: entry for key, entry in server._browser_nonces.items() if entry[1] > now}
+        if len(server._browser_nonces) >= MAX_BROWSER_NONCES:
+            return None
+        nonce = secrets.token_urlsafe(24)
+        server._browser_nonces[nonce] = (origin, now + NONCE_TTL_SECONDS)
+    return nonce
+
+
+def _consume_browser_nonce(server: ThreadingHTTPServer, nonce: str, origin: str | None = None) -> bool:
+    with server._browser_nonce_lock:
+        entry = server._browser_nonces.get(nonce)
+        if entry is None:
+            return False
+        issued_origin, expires = entry
+        if time.monotonic() >= expires:
+            server._browser_nonces.pop(nonce)
+            return False
+        if issued_origin != origin:
+            return False
+        server._browser_nonces.pop(nonce)
+        return True
 
 
 def main() -> None:
@@ -175,13 +287,15 @@ def main() -> None:
     if not 1024 <= args.port <= 65535:
         parser.error("Port must be between 1024 and 65535.")
     server = ThreadingHTTPServer((args.host, args.port), JackHandler)
+    configure_browser_nonces(server)
     server.allowed_source_hosts = load_allowed_source_hosts()
+    server.allowed_fundamental_hosts = load_allowed_hosts("fundamental")
     server.allowed_brokerage_hosts = load_allowed_hosts("brokerage")
     server.market_capture_agent = MarketCaptureAgent(server.allowed_source_hosts)
     server.technical_analysis_agent = TechnicalAnalysisAgent()
     server.chart_control_agent = ChartControlAgent(server.allowed_source_hosts)
     server.market_board_agent = MarketBoardAgent(server.allowed_source_hosts)
-    server.fundamental_agent = FundamentalAgent(load_allowed_hosts("fundamental"))
+    server.fundamental_agent = FundamentalAgent(server.allowed_fundamental_hosts)
     server.portfolio_risk_agent = PortfolioRiskAgent()
     server.quality_supervisor_agent = QualitySupervisorAgent()
     server.browser_portfolio_agent = BrowserPortfolioAgent(server.allowed_brokerage_hosts)

@@ -62,7 +62,7 @@ class MarketCaptureAgent:
             }]
             return report
         try:
-            report = build_market_report(snapshot, self.allowed_hosts)
+            report = build_market_report(snapshot, self.allowed_hosts, enforce_freshness=True)
         except ValueError as error:
             report = build_symbol_request(requested)
             report["symbols"][0]["quality"]["findings"] = [{
@@ -77,5 +77,5 @@ class MarketCaptureAgent:
                 "next_requirement": "بستهٔ دادهٔ بازارِ کامل و معتبر",
             }
             return report
-        report["agent"] = agent | {"status": "CAPTURED", "source": snapshot["source"]}
+        report["agent"] = agent | {"status": "CAPTURED", "source": report["symbols"][0]["market_metadata"]["source"]}
         return report

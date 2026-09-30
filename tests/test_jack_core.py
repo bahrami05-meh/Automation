@@ -1,4 +1,6 @@
 import unittest
+from datetime import datetime
+from unittest.mock import patch
 
 from backend.jack_core import build_symbol_request, quality_supervisor
 from backend.agents.market_capture import MarketCaptureAgent
@@ -14,6 +16,11 @@ from backend.market_data import build_market_report
 
 
 class QualitySupervisorTests(unittest.TestCase):
+    def setUp(self):
+        clock = patch("backend.freshness.utc_now", return_value=datetime.fromisoformat("2026-09-28T12:00:00+03:30"))
+        clock.start()
+        self.addCleanup(clock.stop)
+
     def test_overlap_is_capped_without_blocking(self):
         result = quality_supervisor([
             {"name": "RSI", "family": "momentum", "timeframe": "daily", "direction": "bullish", "weight": 2},
@@ -49,7 +56,7 @@ class QualitySupervisorTests(unittest.TestCase):
         closes = list(range(100, 121))
         rows = [{"open": close - 1, "high": close + 1, "low": close - 2, "close": close, "volume": 1000} for close in closes]
         report = build_market_report({
-            "symbol": "فملی", "source": "https://www.tsetmc.com/market", "collected_at": "2026-09-20T12:00:00+03:30",
+            "symbol": "فملی", "source": "https://www.tsetmc.com/market", "collected_at": "2026-09-28T12:00:00+03:30",
             "timezone": "Asia/Tehran", "price_unit": "IRR", "price_type": "raw", "timeframe": "daily", "ohlcv": rows,
         }, {"www.tsetmc.com"})
         self.assertEqual(report["symbols"][0]["data_status"], "VALID")
@@ -59,14 +66,14 @@ class QualitySupervisorTests(unittest.TestCase):
         rows = [{"open": 1, "high": 2, "low": 1, "close": 2, "volume": 1}] * 21
         with self.assertRaises(ValueError):
             build_market_report({
-                "symbol": "فملی", "source": "https://example.com/market", "collected_at": "2026-09-20T12:00:00+03:30",
+                "symbol": "فملی", "source": "https://example.com/market", "collected_at": "2026-09-28T12:00:00+03:30",
                 "timezone": "Asia/Tehran", "price_unit": "IRR", "price_type": "raw", "timeframe": "daily", "ohlcv": rows,
             }, {"www.tsetmc.com"})
 
     def test_capture_agent_creates_traceable_valid_run(self):
         rows = [{"open": 100, "high": 101, "low": 99, "close": 100, "volume": 1000}] * 21
         report = MarketCaptureAgent({"www.tsetmc.com"}).capture_snapshot("فملی", {
-            "symbol": "فملی", "source": "https://www.tsetmc.com/market", "collected_at": "2026-09-20T12:00:00+03:30",
+            "symbol": "فملی", "source": "https://www.tsetmc.com/market", "collected_at": "2026-09-28T12:00:00+03:30",
             "timezone": "Asia/Tehran", "price_unit": "IRR", "price_type": "raw", "timeframe": "daily", "ohlcv": rows,
         })
         self.assertEqual(report["agent"]["name"], "ایجنت دریافت")
@@ -80,7 +87,7 @@ class QualitySupervisorTests(unittest.TestCase):
     def test_flat_prices_produce_neutral_rsi(self):
         rows = [{"open": 100, "high": 100, "low": 100, "close": 100, "volume": 1000}] * 21
         report = build_market_report({
-            "symbol": "فملی", "source": "https://www.tsetmc.com/market", "collected_at": "2026-09-20T12:00:00+03:30",
+            "symbol": "فملی", "source": "https://www.tsetmc.com/market", "collected_at": "2026-09-28T12:00:00+03:30",
             "timezone": "Asia/Tehran", "price_unit": "IRR", "price_type": "raw", "timeframe": "daily", "ohlcv": rows,
         }, {"www.tsetmc.com"})
         rsi = next(item for item in report["symbols"][0]["indicators"] if item["name"] == "RSI")
@@ -89,7 +96,7 @@ class QualitySupervisorTests(unittest.TestCase):
     def test_technical_agent_analyzes_valid_capture_without_trade_decision(self):
         rows = [{"open": close - 1, "high": close + 1, "low": close - 2, "close": close, "volume": 1000} for close in range(100, 121)]
         report = build_market_report({
-            "symbol": "فملی", "source": "https://www.tsetmc.com/market", "collected_at": "2026-09-20T12:00:00+03:30",
+            "symbol": "فملی", "source": "https://www.tsetmc.com/market", "collected_at": "2026-09-28T12:00:00+03:30",
             "timezone": "Asia/Tehran", "price_unit": "IRR", "price_type": "raw", "timeframe": "daily", "ohlcv": rows,
         }, {"www.tsetmc.com"})
         result = TechnicalAnalysisAgent().analyze(report)
@@ -110,12 +117,12 @@ class QualitySupervisorTests(unittest.TestCase):
     def test_chart_agent_conflict_blocks_jack_decision(self):
         rows = [{"open": close - 1, "high": close + 1, "low": close - 2, "close": close, "volume": 1000} for close in range(100, 121)]
         report = build_market_report({
-            "symbol": "فملی", "source": "https://www.tsetmc.com/market", "collected_at": "2026-09-20T12:00:00+03:30",
+            "symbol": "فملی", "source": "https://www.tsetmc.com/market", "collected_at": "2026-09-28T12:00:00+03:30",
             "timezone": "Asia/Tehran", "price_unit": "IRR", "price_type": "raw", "timeframe": "daily", "ohlcv": rows,
         }, {"www.tsetmc.com"})
         report = TechnicalAnalysisAgent().analyze(report)
         result = ChartControlAgent({"www.tsetmc.com"}).inspect(report, {
-            "symbol": "فملی", "source": "https://www.tsetmc.com/chart", "collected_at": "2026-09-20T12:00:00+03:30",
+            "symbol": "فملی", "source": "https://www.tsetmc.com/chart", "collected_at": "2026-09-28T12:00:00+03:30",
             "timezone": "Asia/Tehran", "timeframe": "daily",
             "indicators": [{"name": "SMA", "direction": "bearish", "parameters": {"period": 20}}],
         })
@@ -132,7 +139,7 @@ class QualitySupervisorTests(unittest.TestCase):
     def test_browser_portfolio_agent_captures_visible_rows_without_sensitive_fields(self):
         report = build_symbol_request("فملی")
         result = BrowserPortfolioAgent({"broker.example"}).capture(report, {
-            "source": "https://broker.example/portfolio", "collected_at": "2026-09-20T12:00:00+03:30",
+            "source": "https://broker.example/portfolio", "collected_at": "2026-09-28T12:00:00+03:30",
             "timezone": "Asia/Tehran", "price_unit": "IRR",
             "holdings": [{"symbol": "فملی", "quantity": 100, "average_price": 1200, "last_price": 1300, "market_value": 130000}],
         })
@@ -141,7 +148,7 @@ class QualitySupervisorTests(unittest.TestCase):
 
     def test_browser_portfolio_agent_blocks_sensitive_fields(self):
         result = BrowserPortfolioAgent({"broker.example"}).capture(build_symbol_request("فملی"), {
-            "source": "https://broker.example/portfolio", "collected_at": "2026-09-20T12:00:00+03:30",
+            "source": "https://broker.example/portfolio", "collected_at": "2026-09-28T12:00:00+03:30",
             "timezone": "Asia/Tehran", "price_unit": "IRR", "token": "not-allowed",
             "holdings": [{"symbol": "فملی", "quantity": 100, "average_price": 1200, "last_price": 1300, "market_value": 130000}],
         })
@@ -150,11 +157,11 @@ class QualitySupervisorTests(unittest.TestCase):
     def test_market_board_agent_observes_valid_open_market_data(self):
         rows = [{"open": close - 1, "high": close + 1, "low": close - 2, "close": close, "volume": 1000} for close in range(100, 121)]
         report = build_market_report({
-            "symbol": "فملی", "source": "https://www.tsetmc.com/market", "collected_at": "2026-09-21T11:40:00+03:30",
+            "symbol": "فملی", "source": "https://www.tsetmc.com/market", "collected_at": "2026-09-28T12:00:00+03:30",
             "timezone": "Asia/Tehran", "price_unit": "IRR", "price_type": "raw", "timeframe": "daily", "ohlcv": rows,
         }, {"www.tsetmc.com"})
         result = MarketBoardAgent({"www.tsetmc.com"}).inspect(report, {
-            "symbol": "فملی", "source": "https://www.tsetmc.com/board", "collected_at": "2026-09-21T11:40:00+03:30",
+            "symbol": "فملی", "source": "https://www.tsetmc.com/board", "collected_at": "2026-09-28T12:00:00+03:30",
             "timezone": "Asia/Tehran", "price_unit": "IRR", "market_status": "open", "last_price": 120,
             "volume": 1500, "average_volume_20": 1000, "individual_buy_volume": 800, "individual_sell_volume": 500,
             "legal_buy_volume": 200, "legal_sell_volume": 400, "buy_queue_value": 300000, "sell_queue_value": 100000,
@@ -170,11 +177,11 @@ class QualitySupervisorTests(unittest.TestCase):
     def test_market_board_agent_blocks_suspended_symbol(self):
         rows = [{"open": close - 1, "high": close + 1, "low": close - 2, "close": close, "volume": 1000} for close in range(100, 121)]
         report = build_market_report({
-            "symbol": "فملی", "source": "https://www.tsetmc.com/market", "collected_at": "2026-09-21T11:40:00+03:30",
+            "symbol": "فملی", "source": "https://www.tsetmc.com/market", "collected_at": "2026-09-28T12:00:00+03:30",
             "timezone": "Asia/Tehran", "price_unit": "IRR", "price_type": "raw", "timeframe": "daily", "ohlcv": rows,
         }, {"www.tsetmc.com"})
         result = MarketBoardAgent({"www.tsetmc.com"}).inspect(report, {
-            "symbol": "فملی", "source": "https://www.tsetmc.com/board", "collected_at": "2026-09-21T11:40:00+03:30",
+            "symbol": "فملی", "source": "https://www.tsetmc.com/board", "collected_at": "2026-09-28T12:00:00+03:30",
             "timezone": "Asia/Tehran", "price_unit": "IRR", "market_status": "suspended", "last_price": 120,
             "volume": 0, "average_volume_20": 1000, "individual_buy_volume": 0, "individual_sell_volume": 0,
             "legal_buy_volume": 0, "legal_sell_volume": 0, "buy_queue_value": 0, "sell_queue_value": 0,
@@ -186,11 +193,11 @@ class QualitySupervisorTests(unittest.TestCase):
     def test_fundamental_agent_observes_official_data_without_trade_decision(self):
         rows = [{"open": close - 1, "high": close + 1, "low": close - 2, "close": close, "volume": 1000} for close in range(100, 121)]
         report = build_market_report({
-            "symbol": "فملی", "source": "https://www.tsetmc.com/market", "collected_at": "2026-09-21T11:40:00+03:30",
+            "symbol": "فملی", "source": "https://www.tsetmc.com/market", "collected_at": "2026-09-28T12:00:00+03:30",
             "timezone": "Asia/Tehran", "price_unit": "IRR", "price_type": "raw", "timeframe": "daily", "ohlcv": rows,
         }, {"www.tsetmc.com"})
         result = FundamentalAgent({"www.codal.ir"}).inspect(report, {
-            "symbol": "فملی", "source": "https://www.codal.ir/report", "collected_at": "2026-09-21T11:40:00+03:30",
+            "symbol": "فملی", "source": "https://www.codal.ir/report", "collected_at": "2026-09-28T12:00:00+03:30",
             "timezone": "Asia/Tehran", "fiscal_year_end": "1405/12/29", "financial_unit": "IRR",
             "revenue": 1000, "net_profit": 200, "operating_margin_percent": 25, "price_to_earnings": 6.2,
             "debt_to_equity": 0.8, "events": [{"event_type": "financial_statement", "published_at": "2026-09-20T10:00:00+03:30"}],
@@ -202,11 +209,11 @@ class QualitySupervisorTests(unittest.TestCase):
     def test_fundamental_agent_blocks_unapproved_source(self):
         rows = [{"open": close - 1, "high": close + 1, "low": close - 2, "close": close, "volume": 1000} for close in range(100, 121)]
         report = build_market_report({
-            "symbol": "فملی", "source": "https://www.tsetmc.com/market", "collected_at": "2026-09-21T11:40:00+03:30",
+            "symbol": "فملی", "source": "https://www.tsetmc.com/market", "collected_at": "2026-09-28T12:00:00+03:30",
             "timezone": "Asia/Tehran", "price_unit": "IRR", "price_type": "raw", "timeframe": "daily", "ohlcv": rows,
         }, {"www.tsetmc.com"})
         result = FundamentalAgent({"www.codal.ir"}).inspect(report, {
-            "symbol": "فملی", "source": "https://example.com/report", "collected_at": "2026-09-21T11:40:00+03:30",
+            "symbol": "فملی", "source": "https://example.com/report", "collected_at": "2026-09-28T12:00:00+03:30",
             "timezone": "Asia/Tehran", "fiscal_year_end": "1405/12/29", "financial_unit": "IRR",
             "revenue": 1000, "net_profit": 200, "operating_margin_percent": 25, "price_to_earnings": 6.2,
             "debt_to_equity": 0.8, "events": [],
@@ -216,14 +223,14 @@ class QualitySupervisorTests(unittest.TestCase):
 
     def test_portfolio_risk_agent_calculates_one_step_cap(self):
         rows = [{"open": close - 1, "high": close + 1, "low": close - 2, "close": close, "volume": 1000} for close in range(100, 121)]
-        report = build_market_report({"symbol": "فملی", "source": "https://www.tsetmc.com/market", "collected_at": "2026-09-21T11:40:00+03:30", "timezone": "Asia/Tehran", "price_unit": "IRR", "price_type": "raw", "timeframe": "daily", "ohlcv": rows}, {"www.tsetmc.com"})
+        report = build_market_report({"symbol": "فملی", "source": "https://www.tsetmc.com/market", "collected_at": "2026-09-28T12:00:00+03:30", "timezone": "Asia/Tehran", "price_unit": "IRR", "price_type": "raw", "timeframe": "daily", "ohlcv": rows}, {"www.tsetmc.com"})
         result = PortfolioRiskAgent().inspect(report, {"symbol": "فملی", "price_unit": "IRR", "account_equity": 1000000, "available_cash": 500000, "risk_percent": 1, "entry_price": 1000, "stop_loss": 950, "fee_per_unit": 2, "slippage_per_unit": 3, "liquidity_cap_quantity": 1000})
         self.assertEqual(result["portfolio_risk_agent"]["status"], "OBSERVED")
         self.assertEqual(result["portfolio_risk"]["metrics"]["max_single_step_quantity"], 181)
 
     def test_quality_supervisor_agent_passes_consistent_report(self):
         rows = [{"open": close - 1, "high": close + 1, "low": close - 2, "close": close, "volume": 1000} for close in range(100, 121)]
-        report = build_market_report({"symbol": "فملی", "source": "https://www.tsetmc.com/market", "collected_at": "2026-09-21T11:40:00+03:30", "timezone": "Asia/Tehran", "price_unit": "IRR", "price_type": "raw", "timeframe": "daily", "ohlcv": rows}, {"www.tsetmc.com"})
+        report = build_market_report({"symbol": "فملی", "source": "https://www.tsetmc.com/market", "collected_at": "2026-09-28T12:00:00+03:30", "timezone": "Asia/Tehran", "price_unit": "IRR", "price_type": "raw", "timeframe": "daily", "ohlcv": rows}, {"www.tsetmc.com"})
         result = QualitySupervisorAgent().inspect(report)
         self.assertEqual(result["quality_supervisor"]["status"], "QA_PASSED")
         self.assertEqual(result["quality_supervisor_agent"]["status"], "QA_PASSED")

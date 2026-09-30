@@ -9,6 +9,7 @@ from collections import defaultdict
 from datetime import datetime, timezone
 import re
 from typing import Any
+from backend.numeric import finite_number, validate_finite_tree
 
 
 VALID_DIRECTIONS = {"bullish", "bearish", "neutral"}
@@ -25,6 +26,9 @@ def quality_supervisor(indicators: list[dict[str, Any]]) -> dict[str, Any]:
     grouped: dict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)
 
     for item in indicators:
+        if not isinstance(item, dict):
+            findings.append({"code": "INDICATOR_INVALID", "severity": "blocker", "message": "ساختار اندیکاتور نامعتبر است."})
+            continue
         required = ("name", "family", "timeframe", "direction", "weight")
         missing = [key for key in required if key not in item]
         if missing or item.get("direction") not in VALID_DIRECTIONS:
@@ -35,7 +39,15 @@ def quality_supervisor(indicators: list[dict[str, Any]]) -> dict[str, Any]:
                 "details": {"indicator": item.get("name", "نامشخص"), "missing": missing},
             })
             continue
-        grouped[(item["family"], item["timeframe"])].append(item)
+        try:
+            weight = finite_number(item["weight"])
+            validate_finite_tree(item.get("parameters", {}))
+            if weight < 0:
+                raise ValueError("Negative weight")
+        except ValueError:
+            findings.append({"code": "INDICATOR_WEIGHT_OR_VALUE_INVALID", "severity": "blocker", "message": "وزن باید متناهی و غیرمنفی و مقادیر اندیکاتور متناهی باشند."})
+            continue
+        grouped[(item["family"], item["timeframe"])].append({**item, "weight": weight})
 
     accepted_score = 0.0
     for (family, timeframe), group in grouped.items():
@@ -64,7 +76,11 @@ def quality_supervisor(indicators: list[dict[str, Any]]) -> dict[str, Any]:
             })
             continue
         direction = next(iter(directions), "neutral")
-        accepted_score += family_weight * {"bullish": 1, "bearish": -1, "neutral": 0}[direction]
+        try:
+            accepted_score = finite_number(accepted_score + family_weight * {"bullish": 1, "bearish": -1, "neutral": 0}[direction])
+        except ValueError:
+            accepted_score = 0.0
+            findings.append({"code": "INDICATOR_SCORE_OVERFLOW", "severity": "blocker", "message": "محاسبهٔ امتیاز از محدودهٔ عدد متناهی خارج شد."})
 
     blockers = [item for item in findings if item["severity"] == "blocker"]
     return {
