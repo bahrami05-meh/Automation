@@ -9,7 +9,7 @@ h1 { margin:6px 0; font-size:clamp(1.7rem,4vw,2.5rem); }
 .panel { background:#172231; border:1px solid #2b4057; border-radius:14px; padding:20px; margin:16px 0; box-shadow:0 8px 24px #0002; }
 .controls { display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; }
 .controls div { display:flex; align-items:center; gap:10px; }
-form { display:flex; align-items:center; gap:8px; flex-wrap:wrap; } input { border:1px solid #42617e; border-radius:9px; padding:10px; background:#0f1924; color:#e8eef8; font:inherit; min-width:170px; }
+form { display:flex; align-items:center; gap:8px; flex-wrap:wrap; } input,select { border:1px solid #42617e; border-radius:9px; padding:10px; background:#0f1924; color:#e8eef8; font:inherit; min-width:170px; }
 textarea { width:100%; border:1px solid #42617e; border-radius:9px; padding:10px; background:#0f1924; color:#e8eef8; font:13px Consolas, monospace; direction:ltr; text-align:left; }
 summary { cursor:pointer; font-weight:700; }
 button { border:0; border-radius:9px; padding:11px 16px; color:#07131f; background:#75d4ff; font:inherit; font-weight:700; cursor:pointer; }
@@ -23,3 +23,17 @@ button:hover { background:#a0e2ff; }
 .finding { border-right:4px solid #d2a135; padding:8px 10px; margin-top:8px; background:#222b34; }.finding.blocker { border-color:#f06b76; }
 .decision { font-weight:700; color:#a8e9c7; }.disclaimer { color:#b9c7d8; font-size:.9rem; }
 .empty { color:#b9c7d8; text-align:center; padding:38px 20px; }
+.portfolio-import h2 { margin-top:0; }
+.portfolio-result { overflow-x:auto; margin-top:16px; }
+.portfolio-summary { margin:16px 0; padding:16px; border:1px solid #2b4057; border-radius:10px; background:#111b27; }
+.portfolio-summary h4 { margin:0 0 12px; }
+.portfolio-summary-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:10px; }
+.portfolio-metric { display:flex; flex-direction:column; gap:8px; min-height:78px; padding:12px; border:1px solid #2b4057; border-radius:8px; }
+.portfolio-metric span { color:#aab8c9; font-size:.88rem; }
+.portfolio-metric strong { overflow-wrap:anywhere; }
+.portfolio-limitations { margin-top:12px; line-height:1.7; }
+.portfolio-table { width:100%; border-collapse:collapse; text-align:right; }
+.portfolio-table th,.portfolio-table td { border-bottom:1px solid #2b4057; padding:9px 10px; white-space:nowrap; }
+.portfolio-table th { color:#91d7ff; }
+.portfolio-table .positive { color:#a8e9c7; }
+.portfolio-table .negative { color:#ff9ca4; }

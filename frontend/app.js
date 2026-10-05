@@ -8,6 +8,13 @@ const empty = document.querySelector('#empty');
 const report = document.querySelector('#report');
 const card = document.querySelector('#symbol-card');
 const disclaimer = document.querySelector('#disclaimer');
+const portfolioFileForm = document.querySelector('#portfolio-file-form');
+const portfolioFileInput = document.querySelector('#portfolio-file');
+const portfolioPriceUnit = document.querySelector('#portfolio-price-unit');
+const portfolioImportButton = document.querySelector('#portfolio-import-button');
+const portfolioImportStatus = document.querySelector('#portfolio-import-status');
+const portfolioImportResult = document.querySelector('#portfolio-import-result');
+const MAX_PORTFOLIO_FILE_BYTES = 5 * 1024 * 1024;
 
 const escapeHtml = (value) => String(value).replace(/[&<>"']/g, (character) => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;'
@@ -112,6 +119,158 @@ snapshotForm.addEventListener('submit', async (event) => {
     renderReport(payload);
   } catch (error) {
     alert(error instanceof SyntaxError ? 'JSON دادهٔ بازار نامعتبر است.' : (error.message || 'تحلیل داده انجام نشد.'));
+  }
+});
+
+function renderPortfolioImport(payload) {
+  portfolioImportResult.replaceChildren();
+  const capture = payload.portfolio_capture;
+  const summary = payload.portfolio_summary;
+  const heading = document.createElement('h3');
+  heading.textContent = `پرتفوی اعتبارسنجی شد · ${capture.holdings_count} دارایی`;
+  portfolioImportResult.append(heading);
+
+  const metadata = document.createElement('p');
+  metadata.textContent = `منبع: ${capture.source} · دریافت: ${capture.collected_at} · واحد قیمت: ${capture.price_unit}`;
+  portfolioImportResult.append(metadata);
+
+  if (summary) {
+    const summaryPanel = document.createElement('section');
+    summaryPanel.className = 'portfolio-summary';
+    const summaryHeading = document.createElement('h4');
+    summaryHeading.textContent = 'خلاصهٔ پرتفوی';
+    summaryPanel.append(summaryHeading);
+
+    const metrics = document.createElement('div');
+    metrics.className = 'portfolio-summary-grid';
+    const numberFormat = (value, fractionDigits = 2) => {
+      if (value === null || value === undefined || !Number.isFinite(Number(value))) return '—';
+      return new Intl.NumberFormat('fa-IR', {maximumFractionDigits: fractionDigits}).format(Number(value));
+    };
+    const money = (value) => `${numberFormat(value)} ${capture.price_unit}`;
+    const metricValues = [
+      ['ارزش فعلی گزارش‌شده', money(summary.reported_total_market_value)],
+      ['بهای خرید تخمینی', money(summary.estimated_total_cost_basis)],
+      ['سود/زیان تحقق‌نیافتهٔ تخمینی', money(summary.estimated_unrealized_pnl)],
+      ['بازده تخمینی', summary.estimated_return_percent === null ? '—' : `${numberFormat(summary.estimated_return_percent)}٪`],
+      ['تمرکز ۵ دارایی بزرگ', summary.top_five_concentration_percent === null ? '—' : `${numberFormat(summary.top_five_concentration_percent)}٪`]
+    ];
+    for (const [label, value] of metricValues) {
+      const metric = document.createElement('div');
+      metric.className = 'portfolio-metric';
+      const metricLabel = document.createElement('span');
+      metricLabel.textContent = label;
+      const metricValue = document.createElement('strong');
+      metricValue.textContent = value;
+      metric.append(metricLabel, metricValue);
+      metrics.append(metric);
+    }
+    summaryPanel.append(metrics);
+    const limitations = document.createElement('p');
+    limitations.className = 'muted portfolio-limitations';
+    limitations.textContent = (summary.limitations || []).join(' ');
+    summaryPanel.append(limitations);
+    portfolioImportResult.append(summaryPanel);
+  }
+
+  const table = document.createElement('table');
+  table.className = 'portfolio-table';
+  const thead = document.createElement('thead');
+  const headerRow = document.createElement('tr');
+  for (const label of ['نماد', 'تعداد', 'میانگین قیمت خرید', 'آخرین قیمت', 'ارزش فعلی', 'سود/زیان تخمینی', 'وزن از کل']) {
+    const cell = document.createElement('th');
+    cell.scope = 'col';
+    cell.textContent = label;
+    headerRow.append(cell);
+  }
+  thead.append(headerRow);
+  table.append(thead);
+
+  const tbody = document.createElement('tbody');
+  const positions = new Map((summary?.positions || []).map((position) => [position.symbol, position]));
+  const numberFormat = (value, fractionDigits = 2) => {
+    if (value === null || value === undefined || !Number.isFinite(Number(value))) return '—';
+    return new Intl.NumberFormat('fa-IR', {maximumFractionDigits: fractionDigits}).format(Number(value));
+  };
+  for (const holding of capture.holdings) {
+    const row = document.createElement('tr');
+    const position = positions.get(holding.symbol);
+    const pnl = position?.estimated_unrealized_pnl;
+    const weight = position?.market_value_weight_percent;
+    const values = [
+      holding.symbol,
+      numberFormat(holding.quantity, 3),
+      numberFormat(holding.average_price, 3),
+      numberFormat(holding.last_price, 3),
+      numberFormat(holding.market_value),
+      numberFormat(pnl),
+      weight === null || weight === undefined ? '—' : `${numberFormat(weight)}٪`
+    ];
+    for (const [index, value] of values.entries()) {
+      const cell = document.createElement('td');
+      cell.textContent = String(value);
+      if (index === 5 && pnl !== null && pnl !== undefined) {
+        cell.classList.add(Number(pnl) < 0 ? 'negative' : 'positive');
+      }
+      row.append(cell);
+    }
+    tbody.append(row);
+  }
+  table.append(tbody);
+  portfolioImportResult.append(table);
+  portfolioImportResult.hidden = false;
+}
+
+portfolioFileForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const file = portfolioFileInput.files?.[0];
+  if (!file) return;
+  if (!file.size || file.size > MAX_PORTFOLIO_FILE_BYTES) {
+    portfolioImportStatus.textContent = 'حجم فایل باید کمتر از ۵ مگابایت باشد.';
+    return;
+  }
+  if (!Number.isFinite(file.lastModified) || file.lastModified <= 0) {
+    portfolioImportStatus.textContent = 'زمان فایل در دسترس نیست؛ فایل را دوباره از EasyTrader دریافت کن.';
+    return;
+  }
+  const extension = file.name.toLowerCase().split('.').pop();
+  if (!['csv', 'xlsx'].includes(extension)) {
+    portfolioImportStatus.textContent = 'فقط فایل CSV یا XLSX پشتیبانی می‌شود.';
+    return;
+  }
+  if (!portfolioPriceUnit.value) {
+    portfolioImportStatus.textContent = 'واحد قیمت را انتخاب کن.';
+    return;
+  }
+
+  portfolioImportButton.disabled = true;
+  portfolioImportResult.hidden = true;
+  portfolioImportStatus.textContent = 'در حال اعتبارسنجی فایل روی همین رایانه…';
+  try {
+    const response = await fetch('/api/portfolio-import', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/octet-stream',
+        'X-Jack-Import-Format': extension,
+        'X-Jack-Price-Unit': portfolioPriceUnit.value,
+        'X-Jack-File-Modified': new Date(file.lastModified).toISOString()
+      },
+      body: file,
+      cache: 'no-store',
+      credentials: 'same-origin'
+    });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.error || payload.portfolio_capture?.reason || 'PORTFOLIO_FILE_IMPORT_FAILED');
+    if (payload.portfolio_capture?.status !== 'PORTFOLIO_CAPTURED') {
+      throw new Error(payload.portfolio_capture?.reason || payload.browser_portfolio_agent?.error_code || 'PORTFOLIO_FILE_IMPORT_FAILED');
+    }
+    renderPortfolioImport(payload);
+    portfolioImportStatus.textContent = 'فایل پردازش شد؛ فقط نتیجه در حافظهٔ همین صفحه نمایش داده می‌شود.';
+    portfolioFileInput.value = '';
+  } catch (error) {
+    portfolioImportStatus.textContent = `ورود فایل انجام نشد: ${error.message || 'PORTFOLIO_FILE_IMPORT_FAILED'}`;
+  } finally {
+    portfolioImportButton.disabled = false;
   }
 });
 

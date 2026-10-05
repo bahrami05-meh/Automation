@@ -8,11 +8,13 @@ import mimetypes
 import secrets
 import threading
 import time
+from datetime import datetime
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 import sys
 import tomllib
+from urllib.parse import urlsplit
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -28,6 +30,8 @@ from backend.agents.quality_supervisor import QualitySupervisorAgent  # noqa: E4
 from backend.browser_bridge import validate_browser_payload, validate_market_api_payload, validate_symbol_request_payload  # noqa: E402
 from backend.jack_core import build_demo_report  # noqa: E402
 from backend.numeric import validate_finite_tree  # noqa: E402
+from backend.portfolio_import import MAX_FILE_BYTES, parse_portfolio_file  # noqa: E402
+from backend.portfolio_summary import summarize_portfolio  # noqa: E402
 
 FRONTEND = ROOT / "frontend"
 NONCE_TTL_SECONDS = 60
@@ -149,9 +153,14 @@ class JackHandler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:  # noqa: N802
         self._cors_origin = None
         endpoint = self.path.split("?", 1)[0]
-        if endpoint not in {"/api/symbol-request", "/api/market-snapshot", "/api/browser-observation"}:
+        if endpoint not in {"/api/symbol-request", "/api/market-snapshot", "/api/browser-observation", "/api/portfolio-import"}:
             self.send_error(HTTPStatus.NOT_FOUND)
             return
+        if endpoint == "/api/portfolio-import":
+            origin = self.headers.get("Origin")
+            if origin and not self._is_local_import_origin(origin):
+                self._send_json({"error": "LOCAL_PORTFOLIO_IMPORT_ORIGIN_BLOCKED", "data_status": "DATA_BLOCKED"}, HTTPStatus.FORBIDDEN)
+                return
         if endpoint == "/api/browser-observation":
             origin = self._validated_cors_origin()
             if self.headers.get("Origin") and origin is None:
@@ -160,6 +169,40 @@ class JackHandler(BaseHTTPRequestHandler):
             self._cors_origin = origin
         try:
             length = int(self.headers.get("Content-Length", "0"))
+            if endpoint == "/api/portfolio-import":
+                if not 1 <= length <= MAX_FILE_BYTES:
+                    raise ValueError("PORTFOLIO_FILE_SIZE_INVALID")
+                if self.headers.get("Content-Type", "").split(";", 1)[0].strip().lower() != "application/octet-stream":
+                    raise ValueError("PORTFOLIO_FILE_CONTENT_TYPE_INVALID")
+                file_format = self.headers.get("X-Jack-Import-Format", "").strip().lower()
+                price_unit = self.headers.get("X-Jack-Price-Unit", "").strip().upper()
+                modified_value = self.headers.get("X-Jack-File-Modified", "").strip()
+                if not modified_value:
+                    raise ValueError("PORTFOLIO_FILE_TIMESTAMP_REQUIRED")
+                try:
+                    file_modified_at = datetime.fromisoformat(modified_value.replace("Z", "+00:00"))
+                except ValueError as error:
+                    raise ValueError("PORTFOLIO_FILE_TIMESTAMP_INVALID") from error
+                if file_modified_at.tzinfo is None or file_modified_at.utcoffset() is None:
+                    raise ValueError("PORTFOLIO_FILE_TIMESTAMP_INVALID")
+                raw_file = self.rfile.read(length)
+                if len(raw_file) != length:
+                    raise ValueError("PORTFOLIO_FILE_SIZE_INVALID")
+                observation = parse_portfolio_file(
+                    raw_file, file_format, price_unit=price_unit,
+                    allowed_hosts=getattr(self.server, "allowed_brokerage_hosts", set()),
+                    collected_at=file_modified_at,
+                )
+                result = self.server.browser_portfolio_agent.capture({"agents": []}, observation)
+                result["mode"] = "PORTFOLIO_FILE_IMPORT_PREVIEW"
+                result["disclaimer"] = "این فقط اعتبارسنجی و نمایش فایل پرتفوی است؛ تحلیل بازار یا توصیهٔ معامله انجام نشده است. فایل روی دیسک ذخیره نمی‌شود."
+                if result["portfolio_capture"]["status"] != "PORTFOLIO_CAPTURED":
+                    result["error"] = result["browser_portfolio_agent"].get("error_code", "PORTFOLIO_OBSERVATION_INVALID")
+                    self._send_json(result, HTTPStatus.UNPROCESSABLE_ENTITY)
+                else:
+                    result["portfolio_summary"] = summarize_portfolio(result["portfolio_capture"]["holdings"])
+                    self._send_json(result)
+                return
             if not 1 <= length <= 262_144:
                 raise ValueError("اندازهٔ درخواست نامعتبر است.")
             payload = json.loads(self.rfile.read(length).decode("utf-8"))
@@ -239,6 +282,20 @@ class JackHandler(BaseHTTPRequestHandler):
         if parsed.path or parsed.params or parsed.query or parsed.fragment or parsed.username or parsed.password or port is not None:
             return None
         return origin if parsed.hostname and parsed.hostname.lower() in approved else None
+
+    def _is_local_import_origin(self, origin: str) -> bool:
+        try:
+            parsed = urlsplit(origin)
+            port = parsed.port
+        except ValueError:
+            return False
+        return (
+            parsed.scheme == "http"
+            and parsed.hostname in {"127.0.0.1", "localhost"}
+            and port == self.server.server_port
+            and not parsed.path and not parsed.query and not parsed.fragment
+            and not parsed.username and not parsed.password
+        )
 
     def log_message(self, format: str, *args: object) -> None:
         print(f"[jack-local] {self.address_string()} - {format % args}")

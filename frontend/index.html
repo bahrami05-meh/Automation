@@ -28,6 +28,24 @@
         <article id="symbol-card" class="panel"></article>
         <p id="disclaimer" class="disclaimer"></p>
       </section>
+      <section class="panel portfolio-import">
+        <h2>ورود فایل پرتفوی EasyTrader</h2>
+        <p class="muted">فایل CSV یا XLSX را که همین حالا از EasyTrader گرفته‌ای انتخاب کن. جک ستون‌های نماد، تعداد، میانگین قیمت خرید، آخرین قیمت و ارزش روز را می‌خواند. فایل فقط برای همین درخواست به سرور localhost فرستاده می‌شود و روی دیسک ذخیره نمی‌شود.</p>
+        <form id="portfolio-file-form">
+          <label for="portfolio-file">فایل CSV یا XLSX</label>
+          <input id="portfolio-file" type="file" accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required>
+          <label for="portfolio-price-unit">واحد قیمت</label>
+          <select id="portfolio-price-unit" required>
+            <option value="" selected disabled>واحد را انتخاب کن</option>
+            <option value="IRR">ریال (IRR)</option>
+            <option value="IRT">تومان (IRT)</option>
+          </select>
+          <button id="portfolio-import-button" type="submit">اعتبارسنجی و نمایش پرتفوی</button>
+        </form>
+        <p id="portfolio-import-status" class="muted" role="status" aria-live="polite"></p>
+        <div id="portfolio-import-result" class="portfolio-result" hidden></div>
+        <p class="muted">جک خلاصهٔ ارزش و وزن دارایی‌ها و برآورد سودوزیان را از همین snapshot محاسبه می‌کند. این محاسبات جایگزین تحلیل بازار نیستند و پیشنهاد معامله نمی‌دهند؛ جزئیات و محدودیت برآورد را زیر خلاصه بخوان. فایل روی دیسک ذخیره نمی‌شود.</p>
+      </section>
       <details class="panel">
         <summary>ورود دادهٔ بازار از منبع تأییدشده</summary>
         <p class="muted">برای آزمایش هستهٔ تحلیل، JSON دارای نماد، منبع HTTPS، زمان Asia/Tehran، واحد IRR/IRT، نوع قیمت و حداقل ۲۱ ردیف OHLCV را وارد کنید. بخش اختیاری market_board_observation برای حجم، صف و حقیقی/حقوقی و fundamental_observation برای دادهٔ رسمی بنیادی است؛ portfolio_observation فقط دادهٔ قابل‌مشاهدهٔ پرتفوی است و هرگز نباید رمز، OTP، کوکی یا نشست داشته باشد. این داده ذخیره نمی‌شود.</p>
